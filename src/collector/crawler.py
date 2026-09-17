@@ -1,6 +1,6 @@
 """Crawler — the engine that runs a parser: queue, workers, limits, stats.
 
-Split out of ``BaseParser`` so that a parser stays declarative. A parser says
+Split out of ``Parser`` so that a parser stays declarative. A parser says
 *what* to fetch and what to do with an item; the crawler owns everything about
 one run — the queue, the workers, the counters and the failures — and is what
 the caller gets back when the run is over.
@@ -21,7 +21,7 @@ from collector.request import Request
 from collector.response import Response
 
 if TYPE_CHECKING:
-    from collector.parser import BaseParser
+    from collector.parser import Parser
 
 logger = logging.getLogger(__name__)
 
@@ -63,7 +63,7 @@ class Crawler:
     them back off ``crawler.parser`` when the run is over.
     """
 
-    parser: BaseParser
+    parser: Parser
     stats: Stats = field(default_factory=Stats)
     #: Every request that failed, paired with its exception. ``run()`` re-raises
     #: the first, but a crawl that survived twenty failures should show twenty.

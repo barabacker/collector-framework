@@ -46,8 +46,8 @@ import pytest
 from curl_cffi.requests.exceptions import RequestException
 
 from collector import (
-    BaseParser,
     Crawler,
+    Parser,
     ParserContext,
     Response,
     RetryPolicy,
@@ -104,7 +104,7 @@ def settings(**kwargs: Any) -> Settings:
     return Settings(**kwargs)
 
 
-class Recording(BaseParser):
+class Recording(Parser):
     """Keeps what it emitted, for a test that wants the items and the stats both.
 
     The sanctioned route for a synchronous caller: put the state on the parser,
@@ -145,7 +145,7 @@ def test_a_crawl_talks_to_the_real_service() -> None:
     a real TLS handshake, with a CDN on the other side of it.
     """
 
-    class Get(BaseParser):
+    class Get(Parser):
         name = 'mockhttp-get'
         start_urls = [f'{BASE}/get?page=2']
         settings = settings()
@@ -170,7 +170,7 @@ def test_a_crawl_talks_to_the_real_service() -> None:
 def test_a_request_carries_its_own_transport_fields_over_the_wire() -> None:
     """``Request.http_kwargs()`` against real curl, not against a fake's ``**kwargs``."""
 
-    class Poster(BaseParser):
+    class Poster(Parser):
         name = 'mockhttp-anything'
         settings = settings()
 
@@ -246,7 +246,7 @@ def test_a_transport_error_spends_the_same_budget_and_then_fails_the_crawl() -> 
     """``/delay/:n`` held past our timeout is the other failure mode the budget covers."""
     trips = RoundTrips()
 
-    class Slow(BaseParser):
+    class Slow(Parser):
         name = 'mockhttp-timeout'
         start_urls = [f'{BASE}/delay/5']
         settings = settings(timeout=1.0, retry=fast_retry(attempts=2), request_hooks=(trips,))
@@ -338,7 +338,7 @@ def test_retry_after_in_seconds_wins_over_the_backoff() -> None:
     """The policy would wait 5s; the server's header asks for 1."""
     trips = RoundTrips()
 
-    class Limited(BaseParser):
+    class Limited(Parser):
         name = 'mockhttp-ra-seconds'
         start_urls = [f'{BASE}/response-headers?Retry-After=1']
         settings = settings(
@@ -360,7 +360,7 @@ def test_retry_after_as_an_http_date_wins_over_the_backoff() -> None:
     trips = RoundTrips()
     when = quote(email.utils.formatdate(time.time() + 2, usegmt=True))
 
-    class Limited(BaseParser):
+    class Limited(Parser):
         name = 'mockhttp-ra-date'
         start_urls = [f'{BASE}/response-headers?Retry-After={when}']
         settings = settings(
@@ -382,7 +382,7 @@ def test_retry_after_as_an_http_date_wins_over_the_backoff() -> None:
 def test_a_retry_after_longer_than_we_will_wait_ends_the_retrying() -> None:
     trips = RoundTrips()
 
-    class Limited(BaseParser):
+    class Limited(Parser):
         name = 'mockhttp-ra-too-long'
         start_urls = [f'{BASE}/response-headers?Retry-After=120']
         settings = settings(
@@ -415,7 +415,7 @@ def test_throttle_paces_the_whole_crawl_not_each_worker() -> None:
     trips = RoundTrips()
     delay = 0.4
 
-    class Fan(BaseParser):
+    class Fan(Parser):
         name = 'mockhttp-fan'
         start_urls = [f'{BASE}/links/5/0']
         settings = settings(concurrency=4, delay=delay, request_hooks=(trips,))

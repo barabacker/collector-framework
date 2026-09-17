@@ -27,14 +27,14 @@ from typing import Any
 
 from collector.crawler import Crawler
 from collector.http.client import build_http_client
-from collector.parser import BaseParser, ParserContext
+from collector.parser import Parser, ParserContext
 
 logger = logging.getLogger(__name__)
 
 
 @asynccontextmanager
 async def open_crawler(
-    parser_cls: type[BaseParser],
+    parser_cls: type[Parser],
     *,
     params: dict[str, str] | None = None,
     sink: Any | None = None,
@@ -72,7 +72,7 @@ async def open_crawler(
 
 
 async def crawl(
-    parser_cls: type[BaseParser],
+    parser_cls: type[Parser],
     *,
     params: dict[str, str] | None = None,
     sink: Any | None = None,
@@ -90,7 +90,7 @@ async def crawl(
 
 
 def run_parser(
-    parser_cls: type[BaseParser],
+    parser_cls: type[Parser],
     *,
     params: dict[str, str] | None = None,
     sink: Any | None = None,
@@ -111,7 +111,7 @@ def run_parser(
 
 
 def collect(
-    parser_cls: type[BaseParser],
+    parser_cls: type[Parser],
     *,
     params: dict[str, str] | None = None,
     log: Callable[[str], Awaitable[None]] | None = None,
@@ -136,7 +136,7 @@ def collect(
     return asyncio.run(drain())
 
 
-def _default_log(parser_cls: type[BaseParser]) -> Callable[[str], Awaitable[None]]:
+def _default_log(parser_cls: type[Parser]) -> Callable[[str], Awaitable[None]]:
     """Tag a parser's log lines with its name and send them to this module's logger."""
 
     async def log(message: str) -> None:

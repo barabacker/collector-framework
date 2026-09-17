@@ -8,11 +8,11 @@ from typing import Any
 
 import pytest
 
-from collector import BaseParser, RetryPolicy, Settings
+from collector import Parser, RetryPolicy, Settings
 from collector.http import Throttle, build_http_client, log_request, log_response
 
 
-class _Bare(BaseParser):
+class _Bare(Parser):
     name = '_bare'
 
     async def parse(self, response: Any):  # pragma: no cover - never run
@@ -56,7 +56,7 @@ def captured(monkeypatch):
     return seen
 
 
-def _with(**kwargs: Any) -> type[BaseParser]:
+def _with(**kwargs: Any) -> type[Parser]:
     # __module__ is what build_http_client resolves a relative cert path against.
     return type('_Configured', (_Bare,), {'settings': Settings(**kwargs), '__module__': __name__})
 

@@ -6,7 +6,7 @@ from dataclasses import FrozenInstanceError, replace
 
 import pytest
 
-from collector import DEFAULT_RETRY_STATUSES, BaseParser, RetryPolicy, Settings
+from collector import DEFAULT_RETRY_STATUSES, Parser, RetryPolicy, Settings
 
 
 def test_defaults_are_conservative():
@@ -30,7 +30,7 @@ def test_replace_narrows_without_touching_the_original():
 
 
 def test_base_parser_has_default_settings():
-    assert BaseParser.settings == Settings()
+    assert Parser.settings == Settings()
 
 
 def test_retry_statuses_are_the_transient_ones():

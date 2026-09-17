@@ -1,14 +1,14 @@
 # collector
 
 A tiny async scraping framework: Spider-style parsers over a `curl_cffi` HTTP
-layer with middleware, retries and throttling. Small enough to read in one
+layer with hooks, retries and throttling. Small enough to read in one
 sitting, and it stays out of your domain model.
 
 ```python
-from collector import BaseParser, Settings, collect
+from collector import Parser, Settings, collect
 
 
-class Quotes(BaseParser):
+class Quotes(Parser):
     name = 'quotes'
     start_urls = ['https://quotes.toscrape.com/']
     settings = Settings(concurrency=4, delay=0.5)
@@ -38,7 +38,7 @@ browser impersonation via `curl_cffi` for sites that fingerprint TLS.
 
 ## What you get
 
-- **`BaseParser`** — declarative: `parse()` is an async generator that yields a
+- **`Parser`** — declarative: `parse()` is an async generator that yields a
   `Request` to follow or anything else to emit it as an item, and
   `start_requests()` covers a start that a URL cannot express — a POST, or
   per-start metadata. It holds no run state of its own.

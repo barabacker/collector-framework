@@ -14,6 +14,11 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Changed
 
+- `BaseParser` is now `Parser`. The `Base` prefix said nothing the `ABC` and
+  the abstract `parse()` did not already enforce, and the module it lives in is
+  `collector.parser`. Downstream code renames the import; nothing else about the
+  class changed. An application that wants a gentler move can alias it itself
+  with `BaseParser = Parser`.
 - `Middleware` is gone. `HttpClient` takes `request_hooks` and `response_hooks`
   as two ordered tuples, keyword-only, and exposes them under the same names.
   A container whose only decision was order has been replaced by the order
@@ -25,7 +30,7 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   two response hooks got them in the opposite order. Request hooks were already
   in declaration order; the two halves now agree. Logging still runs last on the
   way back, so it reports the response actually returned.
-- The package root exports what a *parser* author writes: `BaseParser`,
+- The package root exports what a *parser* author writes: `Parser`,
   `ParserContext`, `Request`, `Response`, `Settings`, `RetryPolicy`,
   `DEFAULT_RETRY_STATUSES`, `Crawler`, `Stats`, the four entry points and
   `clean` — fifteen names instead of twenty-four. The transport moves to
@@ -35,7 +40,7 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   reach for says which of the two you are doing.
 - `http/factory.py` is gone; `build_http_client` lives in `collector.http.client`
   next to what it builds, and is still exported from `collector.http`.
-- The `collector.spider` sub-package is gone: `BaseParser`, `Request` and
+- The `collector.spider` sub-package is gone: `Parser`, `Request` and
   `Response` are now `collector.parser`, `collector.request` and
   `collector.response`, and `ParserContext` lives beside the parser it belongs
   to. Four modules and a package for 240 lines, under a name the documentation
@@ -72,7 +77,7 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 - `Response.selector()` builds its `Selector` once and reuses it. It re-parsed
   the markup on every call, so the ordinary shape of a parse — query the items,
   then query the next-page link — parsed the same page twice.
-- A hook-driven `retry()` now runs the request middleware again, so `Throttle`
+- A hook-driven `retry()` now runs the request hooks again, so `Throttle`
   paces it like any other request. It skipped the request hooks before, which
   meant a response hook solving a challenge put a request on the wire outside
   the `delay` a parser had declared — the site saw twice the rate it was

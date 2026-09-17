@@ -1,7 +1,7 @@
 [project]
 name = "collector-framework"
 version = "0.0.1"
-description = "A tiny async scraping framework: Spider-style parsers over a curl_cffi HTTP layer with middleware, retries and throttling."
+description = "A tiny async scraping framework: Spider-style parsers over a curl_cffi HTTP layer with hooks, retries and throttling."
 readme = "README.md"
 license = "Apache-2.0"
 license-files = ["LICENSE"]

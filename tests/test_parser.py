@@ -1,4 +1,4 @@
-"""BaseParser is declarative: it builds requests and describes items, nothing more."""
+"""Parser is declarative: it builds requests and describes items, nothing more."""
 
 from __future__ import annotations
 
@@ -6,13 +6,13 @@ from typing import Any
 
 from tests.conftest import FakeHttp
 
-from collector import BaseParser, ParserContext, Settings
+from collector import Parser, ParserContext, Settings
 
 PAGE_1 = 'https://example.test/p1'
 PAGE_2 = 'https://example.test/p2'
 
 
-class _TwoPages(BaseParser):
+class _TwoPages(Parser):
     name = 'two_pages'
     start_urls = [PAGE_1]
 
@@ -61,7 +61,7 @@ async def test_start_requests_defaults_to_start_urls():
 
 
 async def test_start_requests_can_be_overridden():
-    class _PostStart(BaseParser):
+    class _PostStart(Parser):
         name = 'post_start'
 
         async def start_requests(self):

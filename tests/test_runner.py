@@ -8,12 +8,12 @@ from typing import Any
 import pytest
 from tests.conftest import FakeHttp
 
-from collector import BaseParser, collect, crawl, open_crawler, run_parser
+from collector import Parser, collect, crawl, open_crawler, run_parser
 
 URL = 'https://example.test/'
 
 
-class _Counting(BaseParser):
+class _Counting(Parser):
     name = 'counting'
     start_urls = [URL]
 
@@ -89,7 +89,7 @@ async def test_crawl_is_the_async_entry_point(monkeypatch):
 def test_collect_returns_the_items(monkeypatch):
     _patch_client(monkeypatch)
 
-    class _Plain(BaseParser):
+    class _Plain(Parser):
         name = 'plain'
         start_urls = [URL]
 
@@ -105,7 +105,7 @@ def test_collect_keeps_the_parsers_own_process_item(monkeypatch):
     _patch_client(monkeypatch)
     tagged: list[Any] = []
 
-    class _Tagging(BaseParser):
+    class _Tagging(Parser):
         name = 'tagging'
         start_urls = [URL]
 
@@ -125,7 +125,7 @@ def test_collect_does_not_substitute_the_parser_class(monkeypatch):
     _patch_client(monkeypatch)
     ran: list[type] = []
 
-    class _Plain(BaseParser):
+    class _Plain(Parser):
         name = 'plain'
         start_urls = [URL]
 
@@ -137,7 +137,7 @@ def test_collect_does_not_substitute_the_parser_class(monkeypatch):
     assert ran == [_Plain]
 
 
-class _AlwaysFails(BaseParser):
+class _AlwaysFails(Parser):
     """Three start URLs, every one of them blowing up in parse()."""
 
     name = 'always_fails'
@@ -190,7 +190,7 @@ def test_a_single_failure_is_not_annotated_with_a_count(monkeypatch):
 async def test_open_crawler_streams_and_exposes_stats(monkeypatch):
     _patch_client(monkeypatch)
 
-    class _Three(BaseParser):
+    class _Three(Parser):
         name = 'three'
         start_urls = [URL]
 
@@ -209,7 +209,7 @@ async def test_open_crawler_stops_a_crawl_a_consumer_walked_away_from(monkeypatc
     """The session must not close while workers are still using it."""
     http = _patch_client(monkeypatch)
 
-    class _Endless(BaseParser):
+    class _Endless(Parser):
         name = 'endless_runner'
         start_urls = [URL]
 

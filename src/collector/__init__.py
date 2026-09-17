@@ -1,6 +1,6 @@
 """collector — a tiny async scraping framework.
 
-Write a parser as a Spider: subclass :class:`BaseParser`, set ``start_urls``,
+Write a parser as a Spider: subclass :class:`Parser`, set ``start_urls``,
 and implement ``parse()`` as an async generator that yields ``Request`` objects
 to follow and items to emit. ``run_parser`` assembles the HTTP client the parser
 declares (impersonation, TLS quirks, response hooks) and runs the crawl,
@@ -14,7 +14,7 @@ The framework stores nothing and knows no item schema: override
 ``collect()`` to get the items back as a list.
 
 What this module exports is what a *parser* author writes. The transport — the
-client, its middleware, the ready-made hooks, the CA-bundle helper — lives in
+client, its hooks, the CA-bundle helper — lives in
 :mod:`collector.http`, which is what a *hook* author writes; the import you
 reach for says which of the two you are doing.
 """
@@ -22,7 +22,7 @@ reach for says which of the two you are doing.
 from __future__ import annotations
 
 from collector.crawler import Crawler, Stats
-from collector.parser import BaseParser, ParserContext
+from collector.parser import Parser, ParserContext
 from collector.request import Request
 from collector.response import Response
 from collector.runner import collect, crawl, open_crawler, run_parser
@@ -35,7 +35,7 @@ __all__ = [
     #: Exported alongside RetryPolicy: narrowing or widening the retryable set
     #: is a parser's decision, and writing the default out by hand invites drift.
     'DEFAULT_RETRY_STATUSES',
-    'BaseParser',
+    'Parser',
     'Crawler',
     'ParserContext',
     'Request',

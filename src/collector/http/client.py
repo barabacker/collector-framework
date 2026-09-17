@@ -29,7 +29,7 @@ from collector.http.tls import ca_bundle_with_extra_cert
 from collector.settings import RetryPolicy, Settings
 
 if TYPE_CHECKING:
-    from collector.parser import BaseParser
+    from collector.parser import Parser
 
 logger = logging.getLogger(__name__)
 
@@ -169,7 +169,7 @@ def _retry_after_seconds(response: Any) -> float | None:
     return max((when - datetime.now(UTC)).total_seconds(), 0.0)
 
 
-def build_http_client(parser_cls: type[BaseParser]) -> HttpClient:
+def build_http_client(parser_cls: type[Parser]) -> HttpClient:
     """Assemble an ``HttpClient`` from what ``parser_cls.settings`` declares.
 
     The two orders are the whole of it, and both read as written: log the
@@ -192,7 +192,7 @@ def build_http_client(parser_cls: type[BaseParser]) -> HttpClient:
     )
 
 
-def session_kwargs(parser_cls: type[BaseParser], settings: Settings) -> dict[str, Any]:
+def session_kwargs(parser_cls: type[Parser], settings: Settings) -> dict[str, Any]:
     """Translate settings into ``AsyncSession`` keyword arguments."""
     kwargs: dict[str, Any] = {}
     if settings.impersonate is not None:

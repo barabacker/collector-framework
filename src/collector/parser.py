@@ -1,4 +1,4 @@
-"""BaseParser — Spider-style base class for parsers — and the context it runs in.
+"""Parser — the Spider-style class a scraper subclasses — and the context it runs in.
 
 ``ParserContext`` lives here because it is only ever built beside a parser and
 only ever read through one: it is the parser's half of a run, where ``Crawler``
@@ -25,7 +25,7 @@ class ParserContext:
     """What a parser needs to run: HTTP client, params, optional sink and log.
 
     Four fields, each with a reader: the crawler sends through ``http`` and
-    reads its limits out of ``params``, ``BaseParser.log()`` writes to ``log``,
+    reads its limits out of ``params``, ``Parser.log()`` writes to ``log``,
     and ``sink`` is the application's own, passed through untouched.
 
     ``sink`` is deliberately untyped: this framework has no storage contract of
@@ -39,7 +39,7 @@ class ParserContext:
     log: Callable[[str], Awaitable[None]] | None = None
 
 
-class BaseParser(ABC):
+class Parser(ABC):
     """Spider-style parser: what to fetch, and what an item is.
 
     A subclass sets ``name`` / ``start_urls`` and implements ``parse()`` as an
