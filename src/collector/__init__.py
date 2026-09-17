@@ -24,7 +24,7 @@ says which of the two you are doing.
 
 from __future__ import annotations
 
-from collector.core import DEFAULT_RETRY_STATUSES, RetryPolicy, Settings, clean
+from collector.core import DEFAULT_RETRY_STATUSES, RetryPolicy, Settings
 from collector.engine import Crawler, Stats, collect, crawl, open_crawler, run_parser
 from collector.spider import Parser, ParserContext, Request, Response
 
@@ -43,7 +43,6 @@ __all__ = [
     'Settings',
     'Stats',
     '__version__',
-    'clean',
     'collect',
     'crawl',
     'open_crawler',

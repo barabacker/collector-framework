@@ -31,8 +31,8 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   way back, so it reports the response actually returned.
 - The package root exports what a *parser* author writes: `Parser`,
   `ParserContext`, `Request`, `Response`, `Settings`, `RetryPolicy`,
-  `DEFAULT_RETRY_STATUSES`, `Crawler`, `Stats`, the four entry points and
-  `clean` — fifteen names instead of twenty-four. The transport moves to
+  `DEFAULT_RETRY_STATUSES`, `Crawler`, `Stats` and the four entry points —
+  fourteen names instead of twenty-four. The transport moves to
   `collector.http`, which is what a *hook* author writes: `HttpClient`,
   `RequestHook`, `ResponseHook`, `Throttle`, `build_http_client` and
   `ca_bundle_with_extra_cert` are imported from there now. Which import you
@@ -42,8 +42,8 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 - The modules are laid out in four packages, by what someone reaching for them
   is doing: `collector.spider` (`Parser`, `ParserContext`, `Request`,
   `Response`), `collector.engine` (`Crawler`, `Stats` and the four entry
-  points), `collector.core` (`Settings`, `RetryPolicy`, `clean` — what all
-  three share) and `collector.http` (the transport). Each re-exports its own
+  points), `collector.core` (`Settings` and `RetryPolicy`, which all three
+  share) and `collector.http` (the transport). Each re-exports its own
   names, and imports from the package root are unchanged, which is how every
   test and the README already did it.
 - **Logger names moved with them.** Anything configuring logging per module
@@ -75,6 +75,10 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   trusted the README got a knob that quietly did nothing. `read_concurrency`
   and `read_max_requests` stay — the crawler reads them — but as
   `collector.engine.params`, not package-level API.
+- `clean()`, the whitespace helper, and the `collector.text` module it lived
+  in. Nothing in the framework ever called it and the README never mentioned
+  it: a convenience for writing `parse()`, which is an application's own code.
+  It is four lines of `re.sub` an application keeps where it uses it.
 - `ParserContext.job_name` and `ParserContext.extra`. Nothing read either one —
   not the framework, not a test, not the README — so they were public API with
   no behaviour behind them. Whatever an application needs to carry belongs on

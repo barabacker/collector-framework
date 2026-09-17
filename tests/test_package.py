@@ -54,5 +54,4 @@ def test_the_root_exports_what_a_parser_author_writes():
         'crawl',
         'run_parser',
         'collect',
-        'clean',
     }
