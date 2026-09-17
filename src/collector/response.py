@@ -8,7 +8,7 @@ from urllib.parse import urljoin
 
 from parsel import Selector
 
-from collector.spider.request import Request
+from collector.request import Request
 
 
 class Response:

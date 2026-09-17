@@ -17,10 +17,11 @@ from dataclasses import dataclass, field
 from typing import TYPE_CHECKING, Any
 
 from collector.params import read_concurrency, read_max_requests
-from collector.spider import Request, Response
+from collector.request import Request
+from collector.response import Response
 
 if TYPE_CHECKING:
-    from collector.spider import BaseParser
+    from collector.parser import BaseParser
 
 logger = logging.getLogger(__name__)
 

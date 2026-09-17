@@ -27,9 +27,11 @@ from collector.http import (
     ca_bundle_with_extra_cert,
 )
 from collector.params import read_concurrency, read_flag, read_max_pages, read_max_requests
+from collector.parser import BaseParser, ParserContext
+from collector.request import Request
+from collector.response import Response
 from collector.runner import collect, crawl, open_crawler, run_parser
 from collector.settings import DEFAULT_RETRY_STATUSES, RetryPolicy, Settings
-from collector.spider import BaseParser, ParserContext, Request, Response
 from collector.text import clean
 
 __version__ = '0.0.1'

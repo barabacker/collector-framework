@@ -12,6 +12,15 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   parser reading a rate limit or a content type had to reach into `raw`, which
   is meant for what this wrapper does not cover.
 
+### Changed
+
+- The `collector.spider` sub-package is gone: `BaseParser`, `Request` and
+  `Response` are now `collector.parser`, `collector.request` and
+  `collector.response`, and `ParserContext` lives beside the parser it belongs
+  to. Four modules and a package for 240 lines, under a name the documentation
+  never used — everything here is a *parser*. Imports from the package root are
+  unchanged, which is how every test and the README already did it.
+
 ### Removed
 
 - `ParserContext.job_name` and `ParserContext.extra`. Nothing read either one —

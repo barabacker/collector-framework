@@ -12,8 +12,8 @@ from collector.http.client import HttpClient
 from collector.http.hooks import Throttle, log_request, log_response
 from collector.http.middleware import Middleware
 from collector.http.tls import ca_bundle_with_extra_cert
+from collector.parser import BaseParser
 from collector.settings import Settings
-from collector.spider import BaseParser
 
 
 def build_http_client(parser_cls: type[BaseParser]) -> HttpClient:

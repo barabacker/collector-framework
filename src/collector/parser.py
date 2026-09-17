@@ -1,15 +1,42 @@
-"""BaseParser — Spider-style base class for parsers."""
+"""BaseParser — Spider-style base class for parsers — and the context it runs in.
+
+``ParserContext`` lives here because it is only ever built beside a parser and
+only ever read through one: it is the parser's half of a run, where ``Crawler``
+owns the other half.
+"""
 
 from __future__ import annotations
 
 from abc import ABC, abstractmethod
-from collections.abc import AsyncIterator, Callable
-from typing import Any, ClassVar
+from collections.abc import AsyncIterator, Awaitable, Callable
+from dataclasses import dataclass, field
+from typing import TYPE_CHECKING, Any, ClassVar
 
+from collector.request import Request
+from collector.response import Response
 from collector.settings import Settings
-from collector.spider.context import ParserContext
-from collector.spider.request import Request
-from collector.spider.response import Response
+
+if TYPE_CHECKING:
+    from collector.http.client import HttpClient
+
+
+@dataclass(slots=True)
+class ParserContext:
+    """What a parser needs to run: HTTP client, params, optional sink and log.
+
+    Four fields, each with a reader: the crawler sends through ``http`` and
+    reads its limits out of ``params``, ``BaseParser.log()`` writes to ``log``,
+    and ``sink`` is the application's own, passed through untouched.
+
+    ``sink`` is deliberately untyped: this framework has no storage contract of
+    its own. An application defines what it stores and how, and reads the sink
+    back in its own ``process_item()`` override.
+    """
+
+    http: HttpClient
+    params: dict[str, str] = field(default_factory=dict)
+    sink: Any | None = None
+    log: Callable[[str], Awaitable[None]] | None = None
 
 
 class BaseParser(ABC):

@@ -27,7 +27,7 @@ from typing import Any
 
 from collector.crawler import Crawler
 from collector.http.factory import build_http_client
-from collector.spider import BaseParser, ParserContext
+from collector.parser import BaseParser, ParserContext
 
 logger = logging.getLogger(__name__)
 
