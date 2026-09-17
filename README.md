@@ -1,8 +1,8 @@
 # collector
 
 A tiny async scraping framework: Spider-style parsers over a `curl_cffi` HTTP
-layer with hooks, retries and throttling. Small enough to read in one
-sitting, and it stays out of your domain model.
+layer with hooks, retries and throttling. Small enough to read in one sitting,
+and it stays out of your domain model.
 
 ```python
 from collector import Parser, Settings, collect
@@ -60,15 +60,17 @@ browser impersonation via `curl_cffi` for sites that fingerprint TLS.
   is how an anti-bot challenge gets solved without the parser knowing.
 - **Throttling** — `delay` and `delay_jitter` install a `Throttle` hook that
   spaces requests out behind a lock, so the gap holds with `concurrency > 1`.
-- **Response helpers** — `selector()` (parsel), `json()`, `urljoin()` and
-  `follow()` for a link on the page.
+- **Response helpers** — `status`, `text`, `headers`, `json()`, `urljoin()`,
+  `follow()` for a link on the page, and `selector()` (parsel), which parses the
+  body once however often you ask for it.
 - **Per-request transport** — a `Request` carries `headers`, `params`, `data`,
   `json` and `cookies`; what is session-wide instead (a proxy, a base header
   set) belongs in `Settings`.
 - **Streaming** — `crawler.stream()` yields items as they are produced, over a
   bounded channel, so a slow consumer applies backpressure and `break` stops the
-  crawl. `open_crawler()` owns the HTTP session for as long as the iteration
-  needs it, and stops a crawl a consumer walked away from.
+  crawl — `stats.reason` then reads `'cancelled'`, not `'done'`. `open_crawler()`
+  owns the HTTP session for as long as the iteration needs it, and stops a crawl
+  a consumer walked away from.
 
 ```python
 async with open_crawler(Quotes) as crawler:

@@ -35,8 +35,8 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   `DEFAULT_RETRY_STATUSES`, `Crawler`, `Stats`, the four entry points and
   `clean` — fifteen names instead of twenty-four. The transport moves to
   `collector.http`, which is what a *hook* author writes: `HttpClient`,
-  `Middleware`, `RequestHook`, `ResponseHook`, `Throttle`, `build_http_client`
-  and `ca_bundle_with_extra_cert` are imported from there now. Which import you
+  `RequestHook`, `ResponseHook`, `Throttle`, `build_http_client` and
+  `ca_bundle_with_extra_cert` are imported from there now. Which import you
   reach for says which of the two you are doing.
 - `http/factory.py` is gone; `build_http_client` lives in `collector.http.client`
   next to what it builds, and is still exported from `collector.http`.
@@ -46,6 +46,14 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   to. Four modules and a package for 240 lines, under a name the documentation
   never used — everything here is a *parser*. Imports from the package root are
   unchanged, which is how every test and the README already did it.
+- The framework is now tested over real sockets. `tests/test_mockhttp.py` drives
+  the public API against https://mockhttp.org, so `curl_cffi`, the retry loop's
+  sleeps, `Retry-After`, the `Throttle` lock and a `stream()` a consumer walked
+  away from are exercised on the wire and not against a stand-in for
+  `HttpClient`. The service is stateless, so a scenario like "two 503s then a
+  200" cannot be staged there; the file says what that leaves uncovered.
+- Those tests are opt-in. They carry a `network` marker that `addopts` excludes,
+  so `pytest` still needs no internet; run them with `uv run pytest -m network`.
 
 ### Removed
 
@@ -82,17 +90,6 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   meant a response hook solving a challenge put a request on the wire outside
   the `delay` a parser had declared — the site saw twice the rate it was
   promised. The attempt budget is unaffected: a hook's retry still spends none.
-
-### Changed
-
-- The framework is now tested over real sockets. `tests/test_mockhttp.py` drives
-  the public API against https://mockhttp.org, so `curl_cffi`, the retry loop's
-  sleeps, `Retry-After`, the `Throttle` lock and a `stream()` a consumer walked
-  away from are exercised on the wire and not against a stand-in for
-  `HttpClient`. The service is stateless, so a scenario like "two 503s then a
-  200" cannot be staged there; the file says what that leaves uncovered.
-- Those tests are opt-in. They carry a `network` marker that `addopts` excludes,
-  so `pytest` still needs no internet; run them with `uv run pytest -m network`.
 
 ## [0.0.1] — 2026-09-17
 
