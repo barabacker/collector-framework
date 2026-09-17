@@ -12,21 +12,16 @@ registry, entry points, a dict — is its own business, not this package's.
 The framework stores nothing and knows no item schema: override
 ``process_item()`` to do something with what a parser emits, or call
 ``collect()`` to get the items back as a list.
+
+What this module exports is what a *parser* author writes. The transport — the
+client, its middleware, the ready-made hooks, the CA-bundle helper — lives in
+:mod:`collector.http`, which is what a *hook* author writes; the import you
+reach for says which of the two you are doing.
 """
 
 from __future__ import annotations
 
 from collector.crawler import Crawler, Stats
-from collector.http import (
-    HttpClient,
-    Middleware,
-    RequestHook,
-    ResponseHook,
-    Throttle,
-    build_http_client,
-    ca_bundle_with_extra_cert,
-)
-from collector.params import read_concurrency, read_flag, read_max_pages, read_max_requests
 from collector.parser import BaseParser, ParserContext
 from collector.request import Request
 from collector.response import Response
@@ -37,30 +32,21 @@ from collector.text import clean
 __version__ = '0.0.1'
 
 __all__ = [
+    #: Exported alongside RetryPolicy: narrowing or widening the retryable set
+    #: is a parser's decision, and writing the default out by hand invites drift.
     'DEFAULT_RETRY_STATUSES',
     'BaseParser',
     'Crawler',
-    'HttpClient',
-    'Middleware',
     'ParserContext',
     'Request',
-    'RequestHook',
     'Response',
-    'ResponseHook',
     'RetryPolicy',
     'Settings',
     'Stats',
-    'Throttle',
     '__version__',
-    'build_http_client',
-    'ca_bundle_with_extra_cert',
     'clean',
     'collect',
     'crawl',
     'open_crawler',
-    'read_concurrency',
-    'read_flag',
-    'read_max_pages',
-    'read_max_requests',
     'run_parser',
 ]

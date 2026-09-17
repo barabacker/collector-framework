@@ -6,7 +6,7 @@ import asyncio
 
 import pytest
 
-from collector import Throttle
+from collector.http import Throttle
 
 
 @pytest.fixture

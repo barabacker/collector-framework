@@ -8,7 +8,8 @@ from typing import Any
 
 import pytest
 
-from collector import BaseParser, RetryPolicy, Settings, Throttle, build_http_client
+from collector import BaseParser, RetryPolicy, Settings
+from collector.http import Throttle, build_http_client
 
 
 class _Bare(BaseParser):

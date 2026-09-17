@@ -52,11 +52,11 @@ from collector import (
     Response,
     RetryPolicy,
     Settings,
-    build_http_client,
     collect,
     open_crawler,
     run_parser,
 )
+from collector.http import build_http_client
 
 pytestmark = pytest.mark.network
 

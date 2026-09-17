@@ -79,9 +79,10 @@ async with open_crawler(Quotes) as crawler:
     print(crawler.stats)
 ```
 
-- **Param readers** — `read_max_pages`, `read_max_requests`, `read_concurrency`,
-  `read_flag`: the knobs arrive as strings and a bad value falls back instead of
-  raising.
+- **Params** — a run's `params` may override `concurrency` and `max_requests`
+  without touching the parser. They arrive as strings from a CLI flag or a job
+  payload, so a bad value falls back to what the parser declared and is logged,
+  rather than killing the crawl.
 
 ## What you do not get, by design
 

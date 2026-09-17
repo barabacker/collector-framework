@@ -6,7 +6,7 @@ from pathlib import Path
 
 import certifi
 
-from collector import ca_bundle_with_extra_cert
+from collector.http import ca_bundle_with_extra_cert
 
 
 def test_bundle_contains_certifi_and_extra(tmp_path: Path):

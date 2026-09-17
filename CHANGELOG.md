@@ -14,6 +14,16 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Changed
 
+- The package root exports what a *parser* author writes: `BaseParser`,
+  `ParserContext`, `Request`, `Response`, `Settings`, `RetryPolicy`,
+  `DEFAULT_RETRY_STATUSES`, `Crawler`, `Stats`, the four entry points and
+  `clean` — fifteen names instead of twenty-four. The transport moves to
+  `collector.http`, which is what a *hook* author writes: `HttpClient`,
+  `Middleware`, `RequestHook`, `ResponseHook`, `Throttle`, `build_http_client`
+  and `ca_bundle_with_extra_cert` are imported from there now. Which import you
+  reach for says which of the two you are doing.
+- `http/factory.py` is gone; `build_http_client` lives in `collector.http.client`
+  next to what it builds, and is still exported from `collector.http`.
 - The `collector.spider` sub-package is gone: `BaseParser`, `Request` and
   `Response` are now `collector.parser`, `collector.request` and
   `collector.response`, and `ParserContext` lives beside the parser it belongs
@@ -23,6 +33,12 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Removed
 
+- `read_max_pages()` and `read_flag()`. Neither was ever called by the
+  framework. `read_max_pages` was the worse of the two: it promised a
+  `max_pages` convention that the engine does not honour, so a parser that
+  trusted the README got a knob that quietly did nothing. `read_concurrency`
+  and `read_max_requests` stay — the crawler reads them — but as
+  `collector.params`, not package-level API.
 - `ParserContext.job_name` and `ParserContext.extra`. Nothing read either one —
   not the framework, not a test, not the README — so they were public API with
   no behaviour behind them. Whatever an application needs to carry belongs on

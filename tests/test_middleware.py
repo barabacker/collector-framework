@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from typing import Any
 
-from collector import Middleware
+from collector.http import Middleware
 
 
 def _request_hook(tag: str, order: list[str]):

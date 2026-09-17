@@ -10,7 +10,8 @@ import pytest
 from curl_cffi.requests.exceptions import RequestException
 from tests.conftest import FakeResponse
 
-from collector import HttpClient, Middleware, RetryPolicy
+from collector import RetryPolicy
+from collector.http import HttpClient, Middleware
 
 
 @pytest.fixture

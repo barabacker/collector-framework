@@ -35,3 +35,24 @@ def test_the_changelog_leads_with_the_current_version():
     headings = re.findall(r'^## \[(.+?)\]', CHANGELOG.read_text(), re.MULTILINE)
     released = [h for h in headings if h.lower() != 'unreleased']
     assert released and released[0] == _declared()
+
+
+def test_the_root_exports_what_a_parser_author_writes():
+    """The transport lives in collector.http; growing this list back is a decision."""
+    assert set(collector.__all__) == {
+        '__version__',
+        'BaseParser',
+        'ParserContext',
+        'Request',
+        'Response',
+        'Settings',
+        'RetryPolicy',
+        'DEFAULT_RETRY_STATUSES',
+        'Crawler',
+        'Stats',
+        'open_crawler',
+        'crawl',
+        'run_parser',
+        'collect',
+        'clean',
+    }
