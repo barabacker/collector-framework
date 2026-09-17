@@ -14,6 +14,17 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Changed
 
+- `Middleware` is gone. `HttpClient` takes `request_hooks` and `response_hooks`
+  as two ordered tuples, keyword-only, and exposes them under the same names.
+  A container whose only decision was order has been replaced by the order
+  itself; `RequestHook` and `ResponseHook` move to `collector.http.hooks`,
+  beside the hooks they describe, and are still exported from `collector.http`.
+- **Behaviour change:** `Settings.response_hooks` now run in the order they are
+  declared. They ran back to front before — the LIFO of the container they were
+  registered with, never something `Settings` promised — so a parser declaring
+  two response hooks got them in the opposite order. Request hooks were already
+  in declaration order; the two halves now agree. Logging still runs last on the
+  way back, so it reports the response actually returned.
 - The package root exports what a *parser* author writes: `BaseParser`,
   `ParserContext`, `Request`, `Response`, `Settings`, `RetryPolicy`,
   `DEFAULT_RETRY_STATUSES`, `Crawler`, `Stats`, the four entry points and

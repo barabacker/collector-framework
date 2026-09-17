@@ -9,7 +9,7 @@ from typing import Any
 import pytest
 
 from collector import BaseParser, RetryPolicy, Settings
-from collector.http import Throttle, build_http_client
+from collector.http import Throttle, build_http_client, log_request, log_response
 
 
 class _Bare(BaseParser):
@@ -23,8 +23,16 @@ async def _hook(response: Any, *, session: Any, retry: Any) -> Any:  # pragma: n
     return response
 
 
+async def _other_hook(response: Any, *, session: Any, retry: Any) -> Any:  # pragma: no cover
+    return response
+
+
 async def _req_hook(method: str, url: str, kwargs: dict[str, Any]) -> None:  # pragma: no cover
     return None
+
+
+async def _other_req_hook(method: str, url: str, kwargs: dict[str, Any]) -> None:
+    return None  # pragma: no cover
 
 
 @pytest.fixture
@@ -88,30 +96,48 @@ def test_session_kwargs_is_the_escape_hatch_and_wins(captured):
 
 def test_logging_hooks_are_always_registered(captured):
     client = build_http_client(_Bare)
-    assert len(client.middleware.request_middleware) == 1
-    assert len(client.middleware.response_middleware) == 1
+    assert client.request_hooks == (log_request,)
+    assert client.response_hooks == (log_response,)
 
 
 def test_declared_response_hooks_run_before_the_logging_hook(captured):
     client = build_http_client(_with(response_hooks=(_hook,)))
-    assert list(client.middleware.response_middleware)[0] is _hook
+    assert client.response_hooks == (_hook, log_response)
 
 
 def test_declared_request_hooks_are_registered(captured):
     client = build_http_client(_with(request_hooks=(_req_hook,)))
-    assert _req_hook in client.middleware.request_middleware
+    assert client.request_hooks == (log_request, _req_hook)
+
+
+def test_hooks_run_in_the_order_the_parser_declared_them(captured):
+    """Both tuples read as written. Response hooks used to come out reversed.
+
+    That was the LIFO of the container they were registered with, not anything
+    ``Settings.response_hooks`` promised — and reading a tuple back to front is
+    not what anyone writing one expects.
+    """
+    client = build_http_client(
+        _with(
+            request_hooks=(_req_hook, _other_req_hook),
+            response_hooks=(_hook, _other_hook),
+        )
+    )
+
+    assert client.request_hooks == (log_request, _req_hook, _other_req_hook)
+    assert client.response_hooks == (_hook, _other_hook, log_response)
 
 
 def test_delay_installs_a_throttle(captured):
     client = build_http_client(_with(delay=0.5, delay_jitter=0.2))
-    throttles = [h for h in client.middleware.request_middleware if isinstance(h, Throttle)]
+    throttles = [h for h in client.request_hooks if isinstance(h, Throttle)]
     assert len(throttles) == 1
     assert (throttles[0].delay, throttles[0].jitter) == (0.5, 0.2)
 
 
 def test_no_delay_means_no_throttle(captured):
     client = build_http_client(_Bare)
-    assert not any(isinstance(h, Throttle) for h in client.middleware.request_middleware)
+    assert not any(isinstance(h, Throttle) for h in client.request_hooks)
 
 
 def test_retry_policy_is_handed_to_the_client(captured):

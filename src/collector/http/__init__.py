@@ -3,13 +3,17 @@
 from __future__ import annotations
 
 from collector.http.client import HttpClient, build_http_client
-from collector.http.hooks import Throttle, log_request, log_response
-from collector.http.middleware import Middleware, RequestHook, ResponseHook
+from collector.http.hooks import (
+    RequestHook,
+    ResponseHook,
+    Throttle,
+    log_request,
+    log_response,
+)
 from collector.http.tls import ca_bundle_with_extra_cert
 
 __all__ = [
     'HttpClient',
-    'Middleware',
     'RequestHook',
     'ResponseHook',
     'Throttle',

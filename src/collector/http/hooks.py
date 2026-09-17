@@ -1,4 +1,10 @@
-"""Ready-made request/response hooks: logging and throttling."""
+"""What a hook is, and the two the framework ships: logging and throttling.
+
+A hook is a callable, not a registration — the client holds two ordered tuples
+of them and calls each in turn. The protocols below are what those tuples are
+typed as, and they live beside the hooks so that writing one means reading one
+file.
+"""
 
 from __future__ import annotations
 
@@ -6,9 +12,37 @@ import asyncio
 import logging
 import random
 import time
-from typing import Any
+from collections.abc import Awaitable, Callable
+from typing import Any, Protocol
 
 logger = logging.getLogger(__name__)
+
+
+class RequestHook(Protocol):
+    """Runs before every round trip; may mutate ``kwargs``.
+
+    Per round trip, not per attempt: a retry — the policy's or a response
+    hook's — is another request to the site, and a ``Throttle`` has to pace it.
+    """
+
+    async def __call__(self, method: str, url: str, kwargs: dict[str, Any]) -> None: ...
+
+
+class ResponseHook(Protocol):
+    """Runs after a response is received.
+
+    May return the response unchanged, return a different one, or ``await
+    retry()`` to re-run the request — after solving an anti-bot challenge, say —
+    and return what that produced. A hook's retry spends no attempt budget.
+    """
+
+    async def __call__(
+        self,
+        response: Any,
+        *,
+        session: Any,
+        retry: Callable[[], Awaitable[Any]],
+    ) -> Any: ...
 
 
 async def log_request(method: str, url: str, kwargs: dict[str, Any]) -> None:

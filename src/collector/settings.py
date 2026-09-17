@@ -13,7 +13,7 @@ from dataclasses import dataclass, field
 from typing import TYPE_CHECKING, Any
 
 if TYPE_CHECKING:
-    from collector.http.middleware import RequestHook, ResponseHook
+    from collector.http.hooks import RequestHook, ResponseHook
 
 #: Statuses worth another attempt: rate limiting and the transient 5xx family.
 #: A 4xx other than 429 means the request itself is wrong — retrying it is noise.

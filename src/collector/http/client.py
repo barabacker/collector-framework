@@ -1,4 +1,4 @@
-"""HttpClient — a curl_cffi session wrapped in middleware and one retry loop.
+"""HttpClient — a curl_cffi session wrapped in hooks and one retry loop.
 
 ``build_http_client`` is here too: assembling the client is knowing what its
 pieces are, and that knowledge should not be a second module away from them.
@@ -10,6 +10,7 @@ import asyncio
 import email.utils
 import inspect
 import logging
+from collections.abc import Sequence
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, cast
@@ -17,8 +18,13 @@ from typing import TYPE_CHECKING, Any, cast
 from curl_cffi.requests import AsyncSession
 from curl_cffi.requests.exceptions import RequestException
 
-from collector.http.hooks import Throttle, log_request, log_response
-from collector.http.middleware import Middleware
+from collector.http.hooks import (
+    RequestHook,
+    ResponseHook,
+    Throttle,
+    log_request,
+    log_response,
+)
 from collector.http.tls import ca_bundle_with_extra_cert
 from collector.settings import RetryPolicy, Settings
 
@@ -29,7 +35,12 @@ logger = logging.getLogger(__name__)
 
 
 class HttpClient:
-    """HTTP client: each request passes through request/response middleware.
+    """HTTP client: every request passes through the hooks, in the order given.
+
+    The hooks are two ordered tuples rather than a container that registers
+    them, because order is the only thing a container was deciding and a tuple
+    says it outright: ``request_hooks`` run front to back before each round
+    trip, ``response_hooks`` front to back after it.
 
     Retries are one mechanism covering both failure modes — a transport error
     and a retryable status — so a flaky site cannot spend two independent
@@ -40,16 +51,23 @@ class HttpClient:
     def __init__(
         self,
         session: AsyncSession[Any],
-        middleware: Middleware,
+        *,
+        request_hooks: Sequence[RequestHook] = (),
+        response_hooks: Sequence[ResponseHook] = (),
         retry: RetryPolicy | None = None,
     ) -> None:
         self._session = session
-        self._middleware = middleware
+        self._request_hooks = tuple(request_hooks)
+        self._response_hooks = tuple(response_hooks)
         self._retry = retry or RetryPolicy()
 
     @property
-    def middleware(self) -> Middleware:
-        return self._middleware
+    def request_hooks(self) -> tuple[RequestHook, ...]:
+        return self._request_hooks
+
+    @property
+    def response_hooks(self) -> tuple[ResponseHook, ...]:
+        return self._response_hooks
 
     @property
     def retry_policy(self) -> RetryPolicy:
@@ -109,13 +127,13 @@ class HttpClient:
             # solves a challenge and calls retry() is sending another request to
             # the site, and Throttle has to pace that one too — ``delay`` is a
             # ceiling on what the site sees, not on what the retry policy does.
-            for request_hook in self._middleware.request_middleware:
+            for request_hook in self._request_hooks:
                 await request_hook(method, url, kwargs)
             return await self._session.request(cast('Any', method), url, **kwargs)
 
         response = await do_request()
 
-        for response_hook in self._middleware.response_middleware:
+        for response_hook in self._response_hooks:
             response = await response_hook(response, session=self._session, retry=do_request)
 
         return response
@@ -152,21 +170,26 @@ def _retry_after_seconds(response: Any) -> float | None:
 
 
 def build_http_client(parser_cls: type[BaseParser]) -> HttpClient:
-    """Assemble an ``HttpClient`` from what ``parser_cls.settings`` declares."""
-    settings = parser_cls.settings
-    middleware = Middleware()
-    middleware.request(log_request)
-    if settings.delay or settings.delay_jitter:
-        middleware.request(Throttle(settings.delay, settings.delay_jitter))
-    for request_hook in settings.request_hooks:
-        middleware.request(request_hook)
+    """Assemble an ``HttpClient`` from what ``parser_cls.settings`` declares.
 
-    middleware.response(log_response)
-    for response_hook in settings.response_hooks:
-        middleware.response(response_hook)
+    The two orders are the whole of it, and both read as written: log the
+    request first, then pace it, then let the parser's own hooks have it; and on
+    the way back the parser's hooks first, with logging last so that it reports
+    the response actually returned.
+    """
+    settings = parser_cls.settings
+    request_hooks: list[RequestHook] = [log_request]
+    if settings.delay or settings.delay_jitter:
+        request_hooks.append(Throttle(settings.delay, settings.delay_jitter))
+    request_hooks.extend(settings.request_hooks)
 
     session: AsyncSession[Any] = AsyncSession(**session_kwargs(parser_cls, settings))
-    return HttpClient(session, middleware, retry=settings.retry)
+    return HttpClient(
+        session,
+        request_hooks=tuple(request_hooks),
+        response_hooks=(*settings.response_hooks, log_response),
+        retry=settings.retry,
+    )
 
 
 def session_kwargs(parser_cls: type[BaseParser], settings: Settings) -> dict[str, Any]:
