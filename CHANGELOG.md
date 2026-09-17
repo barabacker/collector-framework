@@ -6,8 +6,17 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Added
+
+- `Response.headers` — the response headers, alongside `status` and `text`. A
+  parser reading a rate limit or a content type had to reach into `raw`, which
+  is meant for what this wrapper does not cover.
+
 ### Fixed
 
+- `Response.selector()` builds its `Selector` once and reuses it. It re-parsed
+  the markup on every call, so the ordinary shape of a parse — query the items,
+  then query the next-page link — parsed the same page twice.
 - A hook-driven `retry()` now runs the request middleware again, so `Throttle`
   paces it like any other request. It skipped the request hooks before, which
   meant a response hook solving a challenge put a request on the wire outside

@@ -25,14 +25,33 @@ class Response:
         self.status: int = raw.status_code
         self.text: str = raw.text
         self._raw = raw
+        self._selector: Selector | None = None
 
     @property
     def raw(self) -> Any:
         """The underlying client response, for anything this wrapper omits."""
         return self._raw
 
+    @property
+    def headers(self) -> Any:
+        """The response headers, as the client returned them (lookup is case-insensitive).
+
+        Promoted alongside ``status`` and ``text`` because a parser reads them
+        for the same reasons — a rate limit, a content type, a pagination
+        header — and ``raw`` is meant for what this wrapper does *not* cover.
+        """
+        return self._raw.headers
+
     def selector(self) -> Selector:
-        return Selector(text=self.text)
+        """A parsel ``Selector`` over the body, built once and reused.
+
+        A page is normally queried more than once — the items, then the link to
+        the next page — and parsing the same markup again for the second query
+        is pure waste.
+        """
+        if self._selector is None:
+            self._selector = Selector(text=self.text)
+        return self._selector
 
     def json(self) -> Any:
         """Parse the body as JSON."""

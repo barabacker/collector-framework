@@ -25,6 +25,18 @@ def test_selector_queries_the_body():
     assert response.selector().css('h1::text').get() == 'Лот 42'
 
 
+def test_the_selector_is_built_once_and_reused():
+    """A page is queried twice — items, then the next link — on one parse of it."""
+    response = Response(FakeResponse(text=HTML), Request(url='https://example.test/'))
+    assert response.selector() is response.selector()
+
+
+def test_headers_come_from_the_raw_response():
+    raw = FakeResponse(text=HTML, headers={'Retry-After': '2'})
+    response = Response(raw, Request(url='https://example.test/'))
+    assert response.headers == {'Retry-After': '2'}
+
+
 def test_raw_exposes_the_underlying_response():
     raw = FakeResponse(text=HTML)
     assert Response(raw, Request(url='https://example.test/')).raw is raw
