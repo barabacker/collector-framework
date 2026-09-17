@@ -14,18 +14,18 @@ The framework stores nothing and knows no item schema: override
 ``collect()`` to get the items back as a list.
 
 What this module exports is what a *parser* author writes, gathered from the
-four packages underneath it: :mod:`collector.spider` (the parser and its two
-ends of a round trip), :mod:`collector.engine` (what runs one), and
-:mod:`collector.core` (the settings all three share). The fourth,
-:mod:`collector.http`, is the transport — what a *hook* author writes — and it
-is imported from there rather than re-exported here; the import you reach for
-says which of the two you are doing.
+two packages underneath it that a parser touches — :mod:`collector.spider` (the
+parser and its two ends of a round trip) and :mod:`collector.engine` (what runs
+one) — plus :mod:`collector.settings`, which all three packages read and so
+belongs to none of them. The third package, :mod:`collector.http`, is the
+transport: what a *hook* author writes, imported from there rather than
+re-exported here. The import you reach for says which of the two you are doing.
 """
 
 from __future__ import annotations
 
-from collector.core import DEFAULT_RETRY_STATUSES, RetryPolicy, Settings
 from collector.engine import Crawler, Stats, collect, crawl, open_crawler, run_parser
+from collector.settings import DEFAULT_RETRY_STATUSES, RetryPolicy, Settings
 from collector.spider import Parser, ParserContext, Request, Response
 
 __version__ = '0.0.1'

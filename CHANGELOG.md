@@ -39,13 +39,13 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   reach for says which of the two you are doing.
 - `http/factory.py` is gone; `build_http_client` lives in `collector.http.client`
   next to what it builds, and is still exported from `collector.http`.
-- The modules are laid out in four packages, by what someone reaching for them
+- The modules are laid out in three packages, by what someone reaching for them
   is doing: `collector.spider` (`Parser`, `ParserContext`, `Request`,
-  `Response`), `collector.engine` (`Crawler`, `Stats` and the four entry
-  points), `collector.core` (`Settings` and `RetryPolicy`, which all three
-  share) and `collector.http` (the transport). Each re-exports its own
-  names, and imports from the package root are unchanged, which is how every
-  test and the README already did it.
+  `Response`), `collector.engine` (`Crawler`, `Stats` and the four entry points)
+  and `collector.http` (the transport). Each re-exports its own names.
+  `collector.settings` stays a module beside them, because all three read it and
+  it belongs to none. Imports from the package root are unchanged, which is how
+  every test and the README already did it.
 - **Logger names moved with them.** Anything configuring logging per module
   wants `collector.engine.crawler`, `collector.engine.runner` and
   `collector.engine.params` where it used to want `collector.crawler`,

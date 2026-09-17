@@ -12,7 +12,7 @@ from collections.abc import AsyncIterator, Awaitable, Callable
 from dataclasses import dataclass, field
 from typing import TYPE_CHECKING, Any, ClassVar
 
-from collector.core.settings import Settings
+from collector.settings import Settings
 from collector.spider.request import Request
 from collector.spider.response import Response
 
