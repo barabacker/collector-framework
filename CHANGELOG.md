@@ -14,6 +14,17 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   the `delay` a parser had declared — the site saw twice the rate it was
   promised. The attempt budget is unaffected: a hook's retry still spends none.
 
+### Changed
+
+- The framework is now tested over real sockets. `tests/test_mockhttp.py` drives
+  the public API against https://mockhttp.org, so `curl_cffi`, the retry loop's
+  sleeps, `Retry-After`, the `Throttle` lock and a `stream()` a consumer walked
+  away from are exercised on the wire and not against a stand-in for
+  `HttpClient`. The service is stateless, so a scenario like "two 503s then a
+  200" cannot be staged there; the file says what that leaves uncovered.
+- Those tests are opt-in. They carry a `network` marker that `addopts` excludes,
+  so `pytest` still needs no internet; run them with `uv run pytest -m network`.
+
 ## [0.0.1] — 2026-09-17
 
 First release, extracted from the scraper it grew in.

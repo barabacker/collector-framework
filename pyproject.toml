@@ -39,6 +39,14 @@ packages = ["src/collector"]
 asyncio_mode = "auto"
 testpaths = ["tests"]
 pythonpath = ["."]
+# The default run stays offline. Loopback is not the internet: the local server
+# in tests/mock_site.py is part of the suite, deterministic and always up, so
+# those tests run by default. A third party's uptime and rate limit are not,
+# so tests that need one are opt-in: `uv run pytest -m network`.
+addopts = ["-m", "not network"]
+markers = [
+    "network: needs the public internet (mockhttp.org); excluded unless asked for",
+]
 
 [tool.ruff]
 line-length = 100
