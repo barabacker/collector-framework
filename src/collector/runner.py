@@ -26,7 +26,7 @@ from contextlib import asynccontextmanager
 from typing import Any
 
 from collector.crawler import Crawler
-from collector.http.factory import build_http_client
+from collector.http.client import build_http_client
 from collector.parser import BaseParser, ParserContext
 
 logger = logging.getLogger(__name__)

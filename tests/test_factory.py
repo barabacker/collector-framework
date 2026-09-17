@@ -42,8 +42,8 @@ def captured(monkeypatch):
         seen['cert_path'] = path
         return '/tmp/fake-bundle.pem'
 
-    monkeypatch.setattr('collector.http.factory.AsyncSession', _FakeSession)
-    monkeypatch.setattr('collector.http.factory.ca_bundle_with_extra_cert', _fake_bundle)
+    monkeypatch.setattr('collector.http.client.AsyncSession', _FakeSession)
+    monkeypatch.setattr('collector.http.client.ca_bundle_with_extra_cert', _fake_bundle)
     return seen
 
 

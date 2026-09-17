@@ -16,7 +16,7 @@ def ca_bundle_with_extra_cert(cert_path: str) -> str:
     Some sites omit an intermediate certificate from their TLS chain;
     curl/BoringSSL, unlike browsers, will not fetch it, so we append it here.
     ``cert_path`` is an absolute path to the extra PEM file (the caller resolves
-    it — see http.factory).
+    it — see http.client).
     """
     combined = Path(certifi.where()).read_text(encoding='utf-8')
     combined += '\n' + Path(cert_path).read_text(encoding='utf-8')
