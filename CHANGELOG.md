@@ -12,6 +12,14 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   parser reading a rate limit or a content type had to reach into `raw`, which
   is meant for what this wrapper does not cover.
 
+### Removed
+
+- `ParserContext.job_name` and `ParserContext.extra`. Nothing read either one —
+  not the framework, not a test, not the README — so they were public API with
+  no behaviour behind them. Whatever an application needs to carry belongs on
+  its own parser subclass or in `sink`, and a general-purpose bag is not a
+  replacement for them.
+
 ### Fixed
 
 - `Stats.reason` is `'cancelled'` for a crawl that was stopped rather than

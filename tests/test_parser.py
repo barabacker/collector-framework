@@ -32,6 +32,13 @@ def test_a_parser_keeps_no_run_state():
     assert not hasattr(parser, 'crawl')
 
 
+def test_the_context_carries_only_fields_that_have_a_reader():
+    """A slot nothing reads is not a feature; it is public API to maintain."""
+    from dataclasses import fields
+
+    assert [f.name for f in fields(ParserContext)] == ['http', 'params', 'sink', 'log']
+
+
 def test_request_defaults_its_callback_to_parse():
     parser = _parser()
     req = parser.request(PAGE_2)
