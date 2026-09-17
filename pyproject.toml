@@ -39,10 +39,15 @@ packages = ["src/collector"]
 asyncio_mode = "auto"
 testpaths = ["tests"]
 pythonpath = ["."]
-# The default run stays offline. Loopback is not the internet: the local server
-# in tests/mock_site.py is part of the suite, deterministic and always up, so
-# those tests run by default. A third party's uptime and rate limit are not,
-# so tests that need one are opt-in: `uv run pytest -m network`.
+# The default run stays offline: a third party's uptime and rate limit are not
+# this repository's business, so tests that need one are opt-in, with
+# `uv run pytest -m network`.
+#
+# The cost of that is worth stating plainly: nothing in the default run reaches
+# a socket. curl_cffi, the retry loop's sleeps, the Throttle lock and a session
+# outliving a cancelled stream() are covered only under `-m network`, with the
+# one exception of the regression test for the hook-driven retry, which those
+# network tests found and which is checked against the fake in test_client.py.
 addopts = ["-m", "not network"]
 markers = [
     "network: needs the public internet (mockhttp.org); excluded unless asked for",
