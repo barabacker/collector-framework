@@ -39,6 +39,11 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   reach for says which of the two you are doing.
 - `http/factory.py` is gone; `build_http_client` lives in `collector.http.client`
   next to what it builds, and is still exported from `collector.http`.
+- `examples/` — seven runnable scripts, one per topic: pagination, a JSON API,
+  streaming with an early `break`, `process_item()` and a sink, what a failed
+  page leaves behind, request and response hooks, and the pacing knobs. Each
+  keeps its crawl behind `if __name__ == '__main__'`, and the suite imports all
+  of them so an API change breaks them here rather than in front of a reader.
 - The modules are laid out in three packages, by what someone reaching for them
   is doing: `collector.spider` (`Parser`, `ParserContext`, `Request`,
   `Response`), `collector.engine` (`Crawler`, `Stats` and the four entry points)

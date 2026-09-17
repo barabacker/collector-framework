@@ -86,6 +86,17 @@ async with open_crawler(Quotes) as crawler:
   payload, so a bad value falls back to what the parser declared and is logged,
   rather than killing the crawl.
 
+## Examples
+
+Seven runnable scripts in [`examples/`](examples/), each about one thing —
+pagination, a JSON API, streaming with an early `break`, writing items to a
+sink, what happens when pages fail, hooks that solve a challenge, and the
+pacing knobs.
+
+```bash
+uv run python examples/quotes.py
+```
+
 ## What you do not get, by design
 
 No item schema, no storage, no scheduler, no request de-duplication, no
