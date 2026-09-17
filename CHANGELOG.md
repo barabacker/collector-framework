@@ -15,10 +15,9 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 ### Changed
 
 - `BaseParser` is now `Parser`. The `Base` prefix said nothing the `ABC` and
-  the abstract `parse()` did not already enforce, and the module it lives in is
-  `collector.parser`. Downstream code renames the import; nothing else about the
-  class changed. An application that wants a gentler move can alias it itself
-  with `BaseParser = Parser`.
+  the abstract `parse()` did not already enforce. Downstream code renames the
+  import; nothing else about the class changed. An application that wants a
+  gentler move can alias it itself with `BaseParser = Parser`.
 - `Middleware` is gone. `HttpClient` takes `request_hooks` and `response_hooks`
   as two ordered tuples, keyword-only, and exposes them under the same names.
   A container whose only decision was order has been replaced by the order
@@ -40,12 +39,18 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   reach for says which of the two you are doing.
 - `http/factory.py` is gone; `build_http_client` lives in `collector.http.client`
   next to what it builds, and is still exported from `collector.http`.
-- The `collector.spider` sub-package is gone: `Parser`, `Request` and
-  `Response` are now `collector.parser`, `collector.request` and
-  `collector.response`, and `ParserContext` lives beside the parser it belongs
-  to. Four modules and a package for 240 lines, under a name the documentation
-  never used — everything here is a *parser*. Imports from the package root are
-  unchanged, which is how every test and the README already did it.
+- The modules are laid out in four packages, by what someone reaching for them
+  is doing: `collector.spider` (`Parser`, `ParserContext`, `Request`,
+  `Response`), `collector.engine` (`Crawler`, `Stats` and the four entry
+  points), `collector.core` (`Settings`, `RetryPolicy`, `clean` — what all
+  three share) and `collector.http` (the transport). Each re-exports its own
+  names, and imports from the package root are unchanged, which is how every
+  test and the README already did it.
+- **Logger names moved with them.** Anything configuring logging per module
+  wants `collector.engine.crawler`, `collector.engine.runner` and
+  `collector.engine.params` where it used to want `collector.crawler`,
+  `collector.runner` and `collector.params`. The `collector` root logger still
+  catches all of them.
 - The framework is now tested over real sockets. `tests/test_mockhttp.py` drives
   the public API against https://mockhttp.org, so `curl_cffi`, the retry loop's
   sleeps, `Retry-After`, the `Throttle` lock and a `stream()` a consumer walked
@@ -69,7 +74,7 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   `max_pages` convention that the engine does not honour, so a parser that
   trusted the README got a knob that quietly did nothing. `read_concurrency`
   and `read_max_requests` stay — the crawler reads them — but as
-  `collector.params`, not package-level API.
+  `collector.engine.params`, not package-level API.
 - `ParserContext.job_name` and `ParserContext.extra`. Nothing read either one —
   not the framework, not a test, not the README — so they were public API with
   no behaviour behind them. Whatever an application needs to carry belongs on

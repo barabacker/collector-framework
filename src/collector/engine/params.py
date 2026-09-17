@@ -4,7 +4,7 @@ Params arrive as strings (a CLI flag, a job payload, a form field), so each
 reader is forgiving: unset or unparsable falls back to the default and is
 logged rather than raised — a bad knob should not kill a crawl.
 
-Only the two knobs :class:`~collector.crawler.Crawler` actually honours live
+Only the two knobs :class:`~collector.engine.crawler.Crawler` actually honours live
 here. A parser reading its own params reads its own dict; a helper in this
 package would only promise a name the engine does not know.
 """

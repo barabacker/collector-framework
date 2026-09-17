@@ -18,6 +18,7 @@ from typing import TYPE_CHECKING, Any, cast
 from curl_cffi.requests import AsyncSession
 from curl_cffi.requests.exceptions import RequestException
 
+from collector.core.settings import RetryPolicy, Settings
 from collector.http.hooks import (
     RequestHook,
     ResponseHook,
@@ -26,10 +27,9 @@ from collector.http.hooks import (
     log_response,
 )
 from collector.http.tls import ca_bundle_with_extra_cert
-from collector.settings import RetryPolicy, Settings
 
 if TYPE_CHECKING:
-    from collector.parser import Parser
+    from collector.spider.parser import Parser
 
 logger = logging.getLogger(__name__)
 

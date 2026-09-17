@@ -7,7 +7,7 @@ from typing import Any
 
 import pytest
 
-from collector.parser import ParserContext
+from collector.spider import ParserContext
 
 
 @dataclass

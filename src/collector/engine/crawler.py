@@ -16,12 +16,12 @@ from collections.abc import AsyncIterator
 from dataclasses import dataclass, field
 from typing import TYPE_CHECKING, Any
 
-from collector.params import read_concurrency, read_max_requests
-from collector.request import Request
-from collector.response import Response
+from collector.engine.params import read_concurrency, read_max_requests
+from collector.spider.request import Request
+from collector.spider.response import Response
 
 if TYPE_CHECKING:
-    from collector.parser import Parser
+    from collector.spider.parser import Parser
 
 logger = logging.getLogger(__name__)
 

@@ -8,7 +8,7 @@ from __future__ import annotations
 
 import pytest
 
-from collector.params import read_concurrency, read_max_requests
+from collector.engine.params import read_concurrency, read_max_requests
 
 
 @pytest.mark.parametrize(

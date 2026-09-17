@@ -42,7 +42,7 @@ def _patch_client(monkeypatch) -> FakeHttp:
 
     type(http).__aenter__ = _aenter
     type(http).__aexit__ = _aexit
-    monkeypatch.setattr('collector.runner.build_http_client', lambda parser_cls: http)
+    monkeypatch.setattr('collector.engine.runner.build_http_client', lambda parser_cls: http)
     return http
 
 
@@ -74,7 +74,7 @@ def test_run_parser_logs_through_the_default_logger(monkeypatch, caplog):
             await self.log('hello')
             yield {'url': response.request.url}
 
-    with caplog.at_level('INFO', logger='collector.runner'):
+    with caplog.at_level('INFO', logger='collector.engine.runner'):
         run_parser(_Logging, sink=[])
 
     assert '[logging] hello' in caplog.text

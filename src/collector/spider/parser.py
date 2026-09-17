@@ -12,9 +12,9 @@ from collections.abc import AsyncIterator, Awaitable, Callable
 from dataclasses import dataclass, field
 from typing import TYPE_CHECKING, Any, ClassVar
 
-from collector.request import Request
-from collector.response import Response
-from collector.settings import Settings
+from collector.core.settings import Settings
+from collector.spider.request import Request
+from collector.spider.response import Response
 
 if TYPE_CHECKING:
     from collector.http.client import HttpClient
@@ -52,7 +52,7 @@ class Parser(ABC):
 
     A parser is declarative and holds no state of its own: the queue, the
     workers, the counters and the failures all belong to
-    :class:`~collector.crawler.Crawler`, which is what running one gives back.
+    :class:`~collector.engine.crawler.Crawler`, which is what running one gives back.
     """
 
     name: ClassVar[str]

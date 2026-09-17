@@ -314,7 +314,7 @@ async def test_errors_are_logged_as_they_happen(ctx_factory, caplog):
         start_urls = [PAGE_1]
 
     ctx, _ = ctx_factory(FakeHttp())
-    with caplog.at_level('WARNING', logger='collector.crawler'), pytest.raises(ValueError):
+    with caplog.at_level('WARNING', logger='collector.engine.crawler'), pytest.raises(ValueError):
         await Crawler(_Failing(ctx)).run()
 
     assert f'crawl.error GET {PAGE_1}' in caplog.text

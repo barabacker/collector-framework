@@ -12,7 +12,7 @@ there is no second copy of the assembly to drift.
 
 A crawl is asynchronous, but the thing that starts it usually is not — a CLI, a
 cron entry, an RQ task — which is what ``run_parser`` is for. All four hand back
-the :class:`~collector.crawler.Crawler`, which carries the stats, the failures
+the :class:`~collector.engine.crawler.Crawler`, which carries the stats, the failures
 and the parser instance itself.
 """
 
@@ -25,9 +25,9 @@ from collections.abc import AsyncIterator, Awaitable, Callable
 from contextlib import asynccontextmanager
 from typing import Any
 
-from collector.crawler import Crawler
+from collector.engine.crawler import Crawler
 from collector.http.client import build_http_client
-from collector.parser import Parser, ParserContext
+from collector.spider.parser import Parser, ParserContext
 
 logger = logging.getLogger(__name__)
 
