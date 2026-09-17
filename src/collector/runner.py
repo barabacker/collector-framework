@@ -39,7 +39,6 @@ async def open_crawler(
     params: dict[str, str] | None = None,
     sink: Any | None = None,
     log: Callable[[str], Awaitable[None]] | None = None,
-    on_item: Callable[[Any], None] | None = None,
 ) -> AsyncIterator[Crawler]:
     """Build a crawler and keep its HTTP session open for as long as it is used.
 
@@ -59,8 +58,7 @@ async def open_crawler(
     http = build_http_client(parser_cls)
     async with http:
         crawler = Crawler(
-            parser_cls(ParserContext(http=http, params=params or {}, sink=sink, log=log)),
-            on_item=on_item,
+            parser_cls(ParserContext(http=http, params=params or {}, sink=sink, log=log))
         )
         try:
             yield crawler
@@ -79,7 +77,6 @@ async def crawl(
     params: dict[str, str] | None = None,
     sink: Any | None = None,
     log: Callable[[str], Awaitable[None]] | None = None,
-    on_item: Callable[[Any], None] | None = None,
 ) -> Crawler:
     """Run a parser to completion and return the crawler that ran it.
 
@@ -87,9 +84,7 @@ async def crawl(
     A failure propagates with the crawler attached — ``open_crawler`` does that
     on the way out, and does it once.
     """
-    async with open_crawler(
-        parser_cls, params=params, sink=sink, log=log, on_item=on_item
-    ) as crawler:
+    async with open_crawler(parser_cls, params=params, sink=sink, log=log) as crawler:
         await crawler.run()
     return crawler
 
@@ -100,21 +95,19 @@ def run_parser(
     params: dict[str, str] | None = None,
     sink: Any | None = None,
     log: Callable[[str], Awaitable[None]] | None = None,
-    on_item: Callable[[Any], None] | None = None,
 ) -> Crawler:
     """Run a parser to completion synchronously; return the crawler that ran it.
 
     ``sink`` is whatever the parser's ``process_item()`` expects — the framework
-    only passes it through. ``on_item`` is the caller's own item handler, run
-    after ``process_item()``. ``log`` defaults to an async wrapper around this
+    only passes it through. ``log`` defaults to an async wrapper around this
     module's logger.
+
+    Items reach the caller through the parser: override ``process_item()``, keep
+    what you need on ``self``, and read it back off ``crawler.parser``.
     """
-    if log is None:
-
-        async def log(message: str) -> None:  # noqa: A001 — same name by design
-            logger.info('[%s] %s', parser_cls.name, message)
-
-    return asyncio.run(crawl(parser_cls, params=params, sink=sink, log=log, on_item=on_item))
+    return asyncio.run(
+        crawl(parser_cls, params=params, sink=sink, log=log or _default_log(parser_cls))
+    )
 
 
 def collect(
@@ -128,10 +121,28 @@ def collect(
     For a one-off — a script, a notebook, a test — where writing a sink to get
     at the items would be ceremony. A long crawl should still stream into a
     sink rather than pile up in memory.
+
+    It drains ``stream()``, so the parser's own ``process_item()`` still runs
+    and the class handed in runs as itself — no subclass is substituted behind
+    the caller's back.
     """
-    items: list[Any] = []
-    run_parser(parser_cls, params=params, log=log, on_item=items.append)
-    return items
+
+    async def drain() -> list[Any]:
+        async with open_crawler(
+            parser_cls, params=params, log=log or _default_log(parser_cls)
+        ) as crawler:
+            return [item async for item in crawler.stream()]
+
+    return asyncio.run(drain())
+
+
+def _default_log(parser_cls: type[BaseParser]) -> Callable[[str], Awaitable[None]]:
+    """Tag a parser's log lines with its name and send them to this module's logger."""
+
+    async def log(message: str) -> None:
+        logger.info('[%s] %s', parser_cls.name, message)
+
+    return log
 
 
 def _attach_crawler(exc: BaseException, crawler: Crawler) -> None:

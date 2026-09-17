@@ -12,7 +12,7 @@ import asyncio
 import contextlib
 import logging
 import time
-from collections.abc import AsyncIterator, Callable
+from collections.abc import AsyncIterator
 from dataclasses import dataclass, field
 from typing import TYPE_CHECKING, Any
 
@@ -57,13 +57,13 @@ class Stats:
 class Crawler:
     """Runs one parser to completion and holds everything that run produced.
 
-    ``on_item`` is the caller's own handler, run after the parser's
-    ``process_item()`` — it is how ``collect()`` gathers items without
-    subclassing the parser behind its back.
+    An item reaches its consumer two ways, and only two: the parser's own
+    ``process_item()`` pushes it, and ``stream()`` pulls it. A caller who wants
+    the items without writing an async loop keeps them on the parser and reads
+    them back off ``crawler.parser`` when the run is over.
     """
 
     parser: BaseParser
-    on_item: Callable[[Any], None] | None = None
     stats: Stats = field(default_factory=Stats)
     #: Every request that failed, paired with its exception. ``run()`` re-raises
     #: the first, but a crawl that survived twenty failures should show twenty.
@@ -95,7 +95,7 @@ class Crawler:
     async def stream(self) -> AsyncIterator[Any]:
         """Yield items as the crawl produces them.
 
-        Pull-based, where ``process_item()`` and ``on_item`` are push-based: the
+        Pull-based, where ``process_item()`` is push-based: the
         consumer's loop drives, and breaking out of it stops the crawl. The
         channel is bounded, so a slow consumer applies backpressure instead of
         piling items up in memory.
@@ -226,8 +226,6 @@ class Crawler:
                 # forgets super() must not silently corrupt the crawl's count.
                 self.stats.items += 1
                 await parser.process_item(result)
-                if self.on_item is not None:
-                    self.on_item(result)
                 if self._out is not None:
                     # Bounded: this is where a slow stream consumer stops us.
                     await self._out.put(result)

@@ -101,7 +101,7 @@ def test_collect_returns_the_items(monkeypatch):
 
 
 def test_collect_keeps_the_parsers_own_process_item(monkeypatch):
-    """collect() gathers through on_item, so the parser's own hook still runs."""
+    """collect() drains stream(), so the parser's own hook still runs."""
     _patch_client(monkeypatch)
     tagged: list[Any] = []
 

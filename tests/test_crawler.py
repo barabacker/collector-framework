@@ -67,18 +67,22 @@ async def test_process_item_override_receives_every_item(ctx_factory):
     assert crawler.stats.items == 2
 
 
-async def test_on_item_runs_after_process_item(ctx_factory):
-    """collect() rides on this instead of subclassing the parser behind its back."""
-    order: list[str] = []
+async def test_a_sync_caller_reads_its_items_off_the_parser(ctx_factory):
+    """The one push path: keep them on self, read them back from crawler.parser."""
 
-    class _Noting(_TwoPages):
+    class _Keeping(_TwoPages):
+        def __init__(self, ctx: Any) -> None:
+            super().__init__(ctx)
+            self.kept: list[Any] = []
+
         async def process_item(self, item: Any) -> None:
-            order.append('process_item')
+            self.kept.append(item)
 
     ctx, _ = ctx_factory(FakeHttp())
-    await Crawler(_Noting(ctx), on_item=lambda item: order.append('on_item')).run()
+    crawler = Crawler(_Keeping(ctx))
+    await crawler.run()
 
-    assert order == ['process_item', 'on_item', 'process_item', 'on_item']
+    assert [item['url'] for item in crawler.parser.kept] == [PAGE_1, PAGE_2]
 
 
 async def test_item_count_survives_an_override_that_forgets_super(ctx_factory):
@@ -101,9 +105,8 @@ async def test_callback_metadata_reaches_the_response(ctx_factory):
         async def parse_detail(self, response: Any):
             yield {'page': response.metadata['page']}
 
-    seen: list[Any] = []
     ctx, _ = ctx_factory(FakeHttp())
-    await Crawler(_WithMeta(ctx), on_item=seen.append).run()
+    seen = [item async for item in Crawler(_WithMeta(ctx)).stream()]
 
     assert seen == [{'page': 7}]
 
@@ -346,7 +349,7 @@ async def test_stream_yields_across_pages(ctx_factory):
     assert {item['url'] for item in got} == {PAGE_1, PAGE_2}
 
 
-async def test_stream_still_runs_process_item_and_on_item(ctx_factory):
+async def test_stream_still_runs_the_parsers_process_item(ctx_factory):
     """Streaming is another consumer, not a replacement for the parser's hook."""
     pushed: list[Any] = []
 
@@ -355,11 +358,9 @@ async def test_stream_still_runs_process_item_and_on_item(ctx_factory):
             pushed.append(item)
 
     ctx, _ = ctx_factory(FakeHttp())
-    seen: list[Any] = []
-    crawler = Crawler(_Noting(ctx), on_item=seen.append)
-    streamed = [item async for item in crawler.stream()]
+    streamed = [item async for item in Crawler(_Noting(ctx)).stream()]
 
-    assert pushed == seen == streamed
+    assert pushed == streamed
 
 
 async def test_stream_raises_after_yielding_what_succeeded(ctx_factory):

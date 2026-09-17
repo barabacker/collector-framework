@@ -104,7 +104,23 @@ def settings(**kwargs: Any) -> Settings:
     return Settings(**kwargs)
 
 
-class Linked(BaseParser):
+class Recording(BaseParser):
+    """Keeps what it emitted, for a test that wants the items and the stats both.
+
+    The sanctioned route for a synchronous caller: put the state on the parser,
+    read it back off ``crawler.parser`` once the run is over. The crawler hands
+    items to nobody but ``stream()``.
+    """
+
+    def __init__(self, ctx: ParserContext) -> None:
+        super().__init__(ctx)
+        self.items: list[Any] = []
+
+    async def process_item(self, item: Any) -> None:
+        self.items.append(item)
+
+
+class Linked(Recording):
     """Walks ``/links/:n/:offset``: a page of links to pages that do the same.
 
     Every one of those pages links back, so following them without a ceiling
@@ -180,7 +196,7 @@ def test_redirects_are_followed_below_the_framework() -> None:
     """``/relative-redirect/:n`` chains n 302s down to ``/get``; curl follows them."""
     trips = RoundTrips()
 
-    class Redirected(BaseParser):
+    class Redirected(Recording):
         name = 'mockhttp-redirect'
         start_urls = [f'{BASE}/relative-redirect/2']
         settings = settings(request_hooks=(trips,))
@@ -188,10 +204,11 @@ def test_redirects_are_followed_below_the_framework() -> None:
         async def parse(self, response: Response) -> Any:
             yield {'status': response.status, 'final': str(response.raw.url)}
 
-    crawler = run_parser(Redirected, on_item=(items := []).append)
+    crawler = run_parser(Redirected)
+    item = crawler.parser.items[0]
 
-    assert items[0]['status'] == 200
-    assert items[0]['final'].endswith('/get')
+    assert item['status'] == 200
+    assert item['final'].endswith('/get')
     # Three hops on the wire, one request through this framework: curl's business.
     assert crawler.stats.requests == 1
     assert len(trips) == 1
@@ -209,7 +226,7 @@ def test_a_retryable_status_spends_the_whole_attempt_budget(status: int) -> None
     """
     trips = RoundTrips()
 
-    class Failing(BaseParser):
+    class Failing(Recording):
         name = f'mockhttp-{status}'
         start_urls = [f'{BASE}/status/{status}']
         settings = settings(retry=fast_retry(attempts=3), request_hooks=(trips,))
@@ -217,9 +234,9 @@ def test_a_retryable_status_spends_the_whole_attempt_budget(status: int) -> None
         async def parse(self, response: Response) -> Any:
             yield {'status': response.status}
 
-    crawler = run_parser(Failing, on_item=(items := []).append)
+    crawler = run_parser(Failing)
 
-    assert items == [{'status': status}]
+    assert crawler.parser.items == [{'status': status}]
     assert len(trips) == 3  # three round trips …
     assert crawler.stats.requests == 1  # … for one request the parser asked for
     assert crawler.errors == []
@@ -251,7 +268,7 @@ def test_stats_requests_counts_queued_requests_not_round_trips() -> None:
     """The ``Stats`` contract, checked where it can actually be contradicted."""
     trips = RoundTrips()
 
-    class TwoFailing(BaseParser):
+    class TwoFailing(Recording):
         name = 'mockhttp-counted'
         start_urls = [f'{BASE}/status/503', f'{BASE}/status/502']
         settings = settings(retry=fast_retry(attempts=2), request_hooks=(trips,))
@@ -259,9 +276,9 @@ def test_stats_requests_counts_queued_requests_not_round_trips() -> None:
         async def parse(self, response: Response) -> Any:
             yield {'status': response.status}
 
-    crawler = run_parser(TwoFailing, on_item=(items := []).append)
+    crawler = run_parser(TwoFailing)
 
-    assert sorted(item['status'] for item in items) == [502, 503]
+    assert sorted(item['status'] for item in crawler.parser.items) == [502, 503]
     assert len(trips) == 4
     assert crawler.stats.requests == 2
     assert crawler.stats.items == 2
@@ -281,7 +298,7 @@ def test_a_hook_driven_retry_is_paced_but_spends_no_attempt() -> None:
     async def solve(response: Any, *, session: Any, retry: Any) -> Any:
         return await retry() if len(trips) == 1 else response
 
-    class Challenged(BaseParser):
+    class Challenged(Recording):
         name = 'mockhttp-hook-retry'
         start_urls = [f'{BASE}/get']
         settings = settings(
@@ -294,9 +311,9 @@ def test_a_hook_driven_retry_is_paced_but_spends_no_attempt() -> None:
         async def parse(self, response: Response) -> Any:
             yield {'status': response.status}
 
-    crawler = run_parser(Challenged, on_item=(items := []).append)
+    crawler = run_parser(Challenged)
 
-    assert items == [{'status': 200}]
+    assert crawler.parser.items == [{'status': 200}]
     assert len(trips) == 2
     assert trips.gaps()[0] >= delay * 0.9
     assert crawler.stats.requests == 1

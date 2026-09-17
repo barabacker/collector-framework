@@ -44,6 +44,13 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Removed
 
+- `on_item`, the callback on `Crawler`, `crawl()`, `run_parser()` and
+  `open_crawler()`. An item now reaches its consumer two ways instead of three:
+  `process_item()` pushes it and `stream()` pulls it. A synchronous caller that
+  wants the items keeps them on the parser and reads them back off
+  `crawler.parser` — which is what the README already recommends for an
+  application's own counters — or calls `collect()`, which now drains
+  `stream()` and still runs the class it was given, unsubclassed.
 - `read_max_pages()` and `read_flag()`. Neither was ever called by the
   framework. `read_max_pages` was the worse of the two: it promised a
   `max_pages` convention that the engine does not honour, so a parser that
