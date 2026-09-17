@@ -1,0 +1,482 @@
+"""Crawler.run(): queueing, item handling, concurrency, limits, stats and errors."""
+
+from __future__ import annotations
+
+import asyncio
+from contextlib import aclosing
+from dataclasses import replace
+from typing import Any
+
+import pytest
+from tests.conftest import FakeHttp
+
+from collector import BaseParser, Crawler, Request
+
+PAGE_1 = 'https://example.test/p1'
+PAGE_2 = 'https://example.test/p2'
+
+
+class _TwoPages(BaseParser):
+    """Emits one item per page and follows a single link from page 1."""
+
+    name = 'two_pages'
+    start_urls = [PAGE_1]
+
+    async def parse(self, response: Any):
+        yield {'url': response.request.url}
+        if response.request.url == PAGE_1:
+            yield self.request(PAGE_2)
+
+
+class _FailingBoth(BaseParser):
+    name = 'failing_all'
+    start_urls = [PAGE_1, PAGE_2]
+
+    async def parse(self, response: Any):
+        raise ValueError(f'bad {response.request.url}')
+        yield  # pragma: no cover — unreachable, keeps this a generator
+
+
+# ── queueing and items ──────────────────────────────────────────────────────
+
+
+async def test_run_follows_requests_and_counts_items(ctx_factory):
+    http = FakeHttp()
+    ctx, _ = ctx_factory(http)
+
+    stats = await Crawler(_TwoPages(ctx)).run()
+
+    assert stats.items == 2
+    assert stats.requests == 2
+    assert {url for _, url in http.calls} == {PAGE_1, PAGE_2}
+
+
+async def test_process_item_override_receives_every_item(ctx_factory):
+    seen: list[Any] = []
+
+    class _Collecting(_TwoPages):
+        async def process_item(self, item: Any) -> None:
+            await super().process_item(item)
+            seen.append(item)
+
+    ctx, _ = ctx_factory(FakeHttp())
+    crawler = Crawler(_Collecting(ctx))
+    await crawler.run()
+
+    assert [item['url'] for item in seen] == [PAGE_1, PAGE_2]
+    assert crawler.stats.items == 2
+
+
+async def test_on_item_runs_after_process_item(ctx_factory):
+    """collect() rides on this instead of subclassing the parser behind its back."""
+    order: list[str] = []
+
+    class _Noting(_TwoPages):
+        async def process_item(self, item: Any) -> None:
+            order.append('process_item')
+
+    ctx, _ = ctx_factory(FakeHttp())
+    await Crawler(_Noting(ctx), on_item=lambda item: order.append('on_item')).run()
+
+    assert order == ['process_item', 'on_item', 'process_item', 'on_item']
+
+
+async def test_item_count_survives_an_override_that_forgets_super(ctx_factory):
+    class _Sloppy(_TwoPages):
+        async def process_item(self, item: Any) -> None:
+            pass  # no super() call
+
+    ctx, _ = ctx_factory(FakeHttp())
+    assert (await Crawler(_Sloppy(ctx)).run()).items == 2
+
+
+async def test_callback_metadata_reaches_the_response(ctx_factory):
+    class _WithMeta(BaseParser):
+        name = 'with_meta'
+        start_urls = [PAGE_1]
+
+        async def parse(self, response: Any):
+            yield self.request(PAGE_2, callback=self.parse_detail, metadata={'page': 7})
+
+        async def parse_detail(self, response: Any):
+            yield {'page': response.metadata['page']}
+
+    seen: list[Any] = []
+    ctx, _ = ctx_factory(FakeHttp())
+    await Crawler(_WithMeta(ctx), on_item=seen.append).run()
+
+    assert seen == [{'page': 7}]
+
+
+async def test_request_fields_reach_the_http_client(ctx_factory):
+    """params/json/cookies are per-request, so they must survive the queue."""
+
+    class _Api(BaseParser):
+        name = 'api'
+
+        async def start_requests(self):
+            yield self.request(
+                PAGE_1,
+                method='POST',
+                params={'page': 2},
+                json={'q': 'лот'},
+                cookies={'session': 'abc'},
+            )
+
+        async def parse(self, response: Any):
+            yield {'ok': True}
+
+    http = FakeHttp()
+    ctx, _ = ctx_factory(http)
+    await Crawler(_Api(ctx)).run()
+
+    assert http.calls == [('POST', PAGE_1)]
+    assert http.sent == [
+        {'params': {'page': 2}, 'json': {'q': 'лот'}, 'cookies': {'session': 'abc'}}
+    ]
+
+
+async def test_a_plain_request_sends_no_empty_transport_kwargs(ctx_factory):
+    http = FakeHttp()
+    ctx, _ = ctx_factory(http)
+    await Crawler(_TwoPages(ctx)).run()
+
+    assert http.sent == [{}, {}]
+
+
+# ── limits ──────────────────────────────────────────────────────────────────
+
+
+async def test_max_requests_stops_the_crawl(ctx_factory):
+    """A pagination bug otherwise crawls forever with nothing to stop it."""
+
+    class _Capped(_TwoPages):
+        settings = replace(_TwoPages.settings, max_requests=1)
+
+    http = FakeHttp()
+    ctx, _ = ctx_factory(http)
+    stats = await Crawler(_Capped(ctx)).run()
+
+    assert stats.requests == 1
+    assert stats.items == 1
+    assert stats.reason == 'max_requests'
+    assert http.calls == [('GET', PAGE_1)]
+
+
+async def test_a_crawl_ending_exactly_on_the_limit_is_still_done(ctx_factory):
+    """Reaching the cap is not stopping at it — nothing was refused."""
+
+    class _Capped(_TwoPages):
+        settings = replace(_TwoPages.settings, max_requests=2)
+
+    ctx, _ = ctx_factory(FakeHttp())
+    stats = await Crawler(_Capped(ctx)).run()
+
+    assert stats.requests == 2
+    assert stats.reason == 'done'
+
+
+async def test_max_requests_param_overrides_the_setting(ctx_factory):
+    class _Capped(_TwoPages):
+        settings = replace(_TwoPages.settings, max_requests=1)
+
+    ctx, _ = ctx_factory(FakeHttp(), params={'max_requests': '2'})
+    stats = await Crawler(_Capped(ctx)).run()
+
+    assert stats.requests == 2
+    assert stats.reason == 'done'
+
+
+async def test_no_limit_by_default(ctx_factory):
+    ctx, _ = ctx_factory(FakeHttp())
+    assert _TwoPages(ctx).settings.max_requests is None
+
+
+# ── stats ───────────────────────────────────────────────────────────────────
+
+
+async def test_stats_time_the_run(ctx_factory):
+    ctx, _ = ctx_factory(FakeHttp())
+    crawler = Crawler(_TwoPages(ctx))
+    stats = await crawler.run()
+
+    assert stats.finished_at is not None
+    assert stats.elapsed >= 0.0
+
+    # Finished means frozen: elapsed stops moving once the crawl is over.
+    settled = stats.elapsed
+    await asyncio.sleep(0.01)
+    assert stats.elapsed == settled
+
+
+async def test_stats_count_errors_alongside_the_error_list(ctx_factory):
+    ctx, _ = ctx_factory(FakeHttp())
+    crawler = Crawler(_FailingBoth(ctx))
+
+    with pytest.raises(ValueError):
+        await crawler.run()
+
+    assert crawler.stats.errors == 2 == len(crawler.errors)
+    assert crawler.stats.requests == 2
+    assert crawler.stats.items == 0
+
+
+# ── concurrency ─────────────────────────────────────────────────────────────
+
+
+async def test_settings_concurrency_is_the_default_and_params_win(ctx_factory):
+    class _Parallel(_TwoPages):
+        settings = replace(_TwoPages.settings, concurrency=4)
+
+    ctx, _ = ctx_factory(FakeHttp())
+    assert _Parallel(ctx).settings.concurrency == 4
+
+    ctx, _ = ctx_factory(FakeHttp(), params={'concurrency': '2'})
+    assert (await Crawler(_Parallel(ctx)).run()).items == 2
+
+
+async def test_cancelling_a_crawl_leaves_no_workers_behind(ctx_factory):
+    """Workers outliving the crawl would keep the HTTP session alive."""
+
+    class _SlowHttp(FakeHttp):
+        async def request(self, method: str, url: str, **kwargs: Any) -> Any:
+            await asyncio.sleep(10)
+            raise AssertionError('never reached')  # pragma: no cover
+
+    ctx, _ = ctx_factory(_SlowHttp())
+    task = asyncio.create_task(Crawler(_TwoPages(ctx)).run())
+    await asyncio.sleep(0)
+    before = len(asyncio.all_tasks())
+    task.cancel()
+    with pytest.raises(asyncio.CancelledError):
+        await task
+    await asyncio.sleep(0)
+
+    remaining = [t for t in asyncio.all_tasks() if t is not asyncio.current_task()]
+    assert remaining == []
+    assert before > 1  # the workers really had started
+
+
+# ── errors ──────────────────────────────────────────────────────────────────
+
+
+async def test_one_bad_page_does_not_kill_the_worker(ctx_factory):
+    class _Failing(_TwoPages):
+        name = 'failing'
+        # PAGE_2 is only reachable through PAGE_1, which fails — so seed both.
+        start_urls = [PAGE_1, PAGE_2]
+
+        async def parse(self, response: Any):
+            if response.request.url == PAGE_1:
+                raise ValueError('bad page')
+            yield {'ok': True}
+
+    ctx, _ = ctx_factory(FakeHttp())
+    crawler = Crawler(_Failing(ctx))
+
+    with pytest.raises(ValueError, match='bad page'):
+        await crawler.run()
+
+    assert crawler.stats.items == 1
+
+
+async def test_every_error_is_collected_with_its_request(ctx_factory):
+    ctx, _ = ctx_factory(FakeHttp())
+    crawler = Crawler(_FailingBoth(ctx))
+
+    with pytest.raises(ValueError):
+        await crawler.run()
+
+    assert len(crawler.errors) == 2
+    assert {req.url for req, _ in crawler.errors} == {PAGE_1, PAGE_2}
+    assert all(isinstance(exc, ValueError) for _, exc in crawler.errors)
+    assert all(isinstance(req, Request) for req, _ in crawler.errors)
+
+
+async def test_the_reraised_error_carries_the_failing_url(ctx_factory):
+    class _Failing(_FailingBoth):
+        start_urls = [PAGE_1]
+
+    ctx, _ = ctx_factory(FakeHttp())
+    with pytest.raises(ValueError) as excinfo:
+        await Crawler(_Failing(ctx)).run()
+
+    assert f'while handling GET {PAGE_1}' in excinfo.value.__notes__
+
+
+async def test_errors_are_logged_as_they_happen(ctx_factory, caplog):
+    """A long crawl must not stay silent until it ends."""
+
+    class _Failing(_FailingBoth):
+        start_urls = [PAGE_1]
+
+    ctx, _ = ctx_factory(FakeHttp())
+    with caplog.at_level('WARNING', logger='collector.crawler'), pytest.raises(ValueError):
+        await Crawler(_Failing(ctx)).run()
+
+    assert f'crawl.error GET {PAGE_1}' in caplog.text
+
+
+# ── stream ──────────────────────────────────────────────────────────────────
+
+
+class _FiveItems(BaseParser):
+    name = 'five'
+    start_urls = [PAGE_1]
+
+    async def parse(self, response: Any):
+        for n in range(5):
+            yield {'n': n}
+
+
+async def test_stream_yields_every_item(ctx_factory):
+    ctx, _ = ctx_factory(FakeHttp())
+    crawler = Crawler(_FiveItems(ctx))
+
+    got = [item async for item in crawler.stream()]
+
+    assert got == [{'n': n} for n in range(5)]
+    assert crawler.stats.items == 5
+    assert crawler.stats.reason == 'done'
+
+
+async def test_stream_yields_across_pages(ctx_factory):
+    ctx, _ = ctx_factory(FakeHttp())
+    got = [item async for item in Crawler(_TwoPages(ctx)).stream()]
+    assert {item['url'] for item in got} == {PAGE_1, PAGE_2}
+
+
+async def test_stream_still_runs_process_item_and_on_item(ctx_factory):
+    """Streaming is another consumer, not a replacement for the parser's hook."""
+    pushed: list[Any] = []
+
+    class _Noting(_FiveItems):
+        async def process_item(self, item: Any) -> None:
+            pushed.append(item)
+
+    ctx, _ = ctx_factory(FakeHttp())
+    seen: list[Any] = []
+    crawler = Crawler(_Noting(ctx), on_item=seen.append)
+    streamed = [item async for item in crawler.stream()]
+
+    assert pushed == seen == streamed
+
+
+async def test_stream_raises_after_yielding_what_succeeded(ctx_factory):
+    """The crawl's outcome surfaces at the end, exactly as run() does."""
+
+    class _ItemThenFail(BaseParser):
+        name = 'item_then_fail'
+        start_urls = [PAGE_1, PAGE_2]
+
+        async def parse(self, response: Any):
+            if response.request.url == PAGE_2:
+                raise ValueError('boom')
+            yield {'ok': True}
+
+    ctx, _ = ctx_factory(FakeHttp())
+    crawler = Crawler(_ItemThenFail(ctx))
+
+    got: list[Any] = []
+    with pytest.raises(ValueError, match='boom'):
+        async for item in crawler.stream():
+            got.append(item)
+
+    assert got == [{'ok': True}]
+    assert len(crawler.errors) == 1
+
+
+async def test_breaking_out_stops_an_endless_crawl(ctx_factory):
+    """The whole point of pull: the consumer decides when enough is enough."""
+
+    class _Endless(BaseParser):
+        name = 'endless'
+        start_urls = [PAGE_1]
+
+        async def parse(self, response: Any):
+            yield {'tick': True}
+            yield self.request(PAGE_1)
+
+    http = FakeHttp()
+    ctx, _ = ctx_factory(http)
+    crawler = Crawler(_Endless(ctx))
+
+    got = []
+    # A timeout rather than a hang if backpressure or cancellation regress.
+    async with asyncio.timeout(5), aclosing(crawler.stream()) as stream:
+        async for item in stream:
+            got.append(item)
+            if len(got) == 3:
+                break
+
+    await asyncio.sleep(0)
+    assert len(got) == 3
+    # The crawl cannot have run away: the bounded channel held it to the
+    # consumer's pace, and closing the generator cancelled it.
+    assert len(http.calls) < 10
+    remaining = [t for t in asyncio.all_tasks() if t is not asyncio.current_task()]
+    assert remaining == []
+
+
+async def test_an_abandoned_stream_leaves_the_crawl_running(ctx_factory):
+    """Why aclose() exists: break alone does not finalise the generator."""
+
+    class _Endless(BaseParser):
+        name = 'endless_leak'
+        start_urls = [PAGE_1]
+
+        async def parse(self, response: Any):
+            yield {'tick': True}
+            yield self.request(PAGE_1)
+
+    ctx, _ = ctx_factory(FakeHttp())
+    crawler = Crawler(_Endless(ctx))
+
+    async for _item in crawler.stream():
+        break  # no aclosing(), no open_crawler() — the crawl is still going
+
+    await asyncio.sleep(0)
+    run_task = crawler._run_task
+    assert run_task is not None and not run_task.done()
+
+    await crawler.aclose()
+    assert crawler._run_task is None
+    assert run_task.cancelled()
+
+
+async def test_stream_respects_max_requests(ctx_factory):
+    class _Capped(_TwoPages):
+        settings = replace(_TwoPages.settings, max_requests=1)
+
+    ctx, _ = ctx_factory(FakeHttp())
+    crawler = Crawler(_Capped(ctx))
+    got = [item async for item in crawler.stream()]
+
+    assert got == [{'url': PAGE_1}]
+    assert crawler.stats.reason == 'max_requests'
+
+
+async def test_the_channel_is_bounded_by_concurrency(ctx_factory):
+    """Unbounded would buffer the whole crawl in memory and drop backpressure."""
+    ctx, _ = ctx_factory(FakeHttp(), params={'concurrency': '3'})
+    assert Crawler(_TwoPages(ctx))._buffer_size() == 3
+
+    ctx, _ = ctx_factory(FakeHttp())
+    assert Crawler(_TwoPages(ctx))._buffer_size() == 1
+
+
+async def test_a_slow_consumer_holds_the_crawl_back(ctx_factory):
+    """Backpressure: with a buffer of one, the crawl cannot outrun the reader."""
+    http = FakeHttp()
+    ctx, _ = ctx_factory(http)
+
+    seen = 0
+    async for _item in Crawler(_FiveItems(ctx)).stream():
+        seen += 1
+        if seen == 1:
+            # One item read, one parked in the channel — the worker is blocked
+            # on the third rather than having produced all five.
+            assert http.calls == [('GET', PAGE_1)]
+        await asyncio.sleep(0)
+
+    assert seen == 5

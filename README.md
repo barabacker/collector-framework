@@ -1,0 +1,125 @@
+# collector
+
+A tiny async scraping framework: Spider-style parsers over a `curl_cffi` HTTP
+layer with middleware, retries and throttling. Small enough to read in one
+sitting, and it stays out of your domain model.
+
+```python
+from collector import BaseParser, Settings, collect
+
+
+class Quotes(BaseParser):
+    name = 'quotes'
+    start_urls = ['https://quotes.toscrape.com/']
+    settings = Settings(concurrency=4, delay=0.5)
+
+    async def parse(self, response):
+        for quote in response.selector().css('div.quote'):
+            yield {
+                'text': quote.css('span.text::text').get(),
+                'author': quote.css('small.author::text').get(),
+            }
+
+        next_page = response.selector().css('li.next a::attr(href)').get()
+        if next_page:
+            yield response.follow(next_page)
+
+
+for quote in collect(Quotes):
+    print(quote['author'])
+```
+
+## Why it exists
+
+`Scrapy` brings a whole runtime (its own event loop, settings, signals, project
+layout) and `requests`-in-a-loop brings none. This sits in between: an async
+producer/consumer crawl you can embed in a worker, a CLI or a web job, with
+browser impersonation via `curl_cffi` for sites that fingerprint TLS.
+
+## What you get
+
+- **`BaseParser`** — declarative: `parse()` is an async generator that yields a
+  `Request` to follow or anything else to emit it as an item, and
+  `start_requests()` covers a start that a URL cannot express — a POST, or
+  per-start metadata. It holds no run state of its own.
+- **`Crawler`** — the engine, and what running a parser gives back. It owns the
+  queue and the `concurrency` workers, collects per-request errors instead of
+  killing a worker, re-raises the first at the end, and carries `stats`,
+  `errors` and the `parser` itself once the run is over.
+- **`max_requests`** — a safety valve. Without a ceiling, a bug in pagination
+  crawls forever with nothing to stop it; on reaching it the crawl ends
+  cleanly with `stats.reason == 'max_requests'`.
+- **`Settings`** — one frozen dataclass per parser holding proxy, timeout,
+  impersonation, headers, TLS quirks, pacing, retry policy and hooks. A subclass
+  narrows its parent's with `dataclasses.replace`. The HTTP client is assembled
+  from it, so the caller never carries site quirks.
+- **One retry policy** — `RetryPolicy` covers both failure modes with a single
+  attempt budget: transport errors and retryable statuses (429 and the 5xx
+  family), with exponential backoff and `Retry-After` honoured up to a cap you
+  set. A response hook can separately `await retry()` to re-run a request, which
+  is how an anti-bot challenge gets solved without the parser knowing.
+- **Throttling** — `delay` and `delay_jitter` install a `Throttle` hook that
+  spaces requests out behind a lock, so the gap holds with `concurrency > 1`.
+- **Response helpers** — `selector()` (parsel), `json()`, `urljoin()` and
+  `follow()` for a link on the page.
+- **Per-request transport** — a `Request` carries `headers`, `params`, `data`,
+  `json` and `cookies`; what is session-wide instead (a proxy, a base header
+  set) belongs in `Settings`.
+- **Streaming** — `crawler.stream()` yields items as they are produced, over a
+  bounded channel, so a slow consumer applies backpressure and `break` stops the
+  crawl. `open_crawler()` owns the HTTP session for as long as the iteration
+  needs it, and stops a crawl a consumer walked away from.
+
+```python
+async with open_crawler(Quotes) as crawler:
+    async for quote in crawler.stream():
+        await save(quote)
+        if enough():
+            break  # the crawl stops with it
+    print(crawler.stats)
+```
+
+- **Param readers** — `read_max_pages`, `read_max_requests`, `read_concurrency`,
+  `read_flag`: the knobs arrive as strings and a bad value falls back instead of
+  raising.
+
+## What you do not get, by design
+
+No item schema, no storage, no scheduler, no request de-duplication, no
+robots.txt, and no registry — how an application names and looks up a parser is
+its own business, and a library holding global mutable state for it is a cost,
+not a feature. The framework never persists anything: override `process_item()` and
+write to `ctx.sink`, which it passes through untouched.
+
+```python
+class Saving(Quotes):
+    async def process_item(self, item):
+        await self.ctx.sink.save(item)
+
+
+crawler = run_parser(Saving, sink=my_sink)
+crawler.stats  # Stats(requests=…, errors=…, items=…, reason='done')
+crawler.errors  # [(Request, Exception), …]
+crawler.parser  # the instance, for whatever counters the app kept on it
+```
+
+`stats.items` is counted by the crawler, so an override that forgets `super()`
+cannot corrupt it. `stats.requests` counts requests the parser asked for —
+retries happen inside the HTTP client and are invisible to it.
+
+## Install
+
+```bash
+pip install collector-framework     # import name: collector
+```
+
+Requires Python 3.11+.
+
+## Status
+
+`0.0.1`, extracted from a production scraper that runs ~30 sites. The API is
+young: minor versions may break it until `1.0`.
+
+## License
+
+Apache-2.0
