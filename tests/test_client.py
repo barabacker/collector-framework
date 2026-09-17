@@ -87,6 +87,31 @@ async def test_response_hook_can_retry_the_request():
     assert len(session.calls) == 2
 
 
+async def test_a_hook_driven_retry_runs_the_request_hooks_again():
+    """It is another request to the site, so Throttle must get to pace it.
+
+    The hook-driven ``retry()`` is not a failed attempt and spends no attempt
+    budget — but it does put a request on the wire, and a request that skips the
+    request middleware skips the pacing the parser declared with ``delay``.
+    """
+    session = _FakeSession([FakeResponse(text='challenge'), FakeResponse(text='content')])
+    mw = Middleware()
+    paced: list[str] = []
+
+    async def pace(method: str, url: str, kwargs: dict[str, Any]) -> None:
+        paced.append(url)
+
+    async def solve(response: Any, *, session: Any, retry: Any) -> Any:
+        return await retry() if response.text == 'challenge' else response
+
+    mw.request(pace)
+    mw.response(solve)
+    client = HttpClient(session, mw)
+
+    assert (await client.request('GET', 'https://example.test/')).text == 'content'
+    assert paced == ['https://example.test/'] * 2
+
+
 async def test_network_errors_are_retried_then_the_response_returned(no_sleep):
     session = _FakeSession([RequestException('boom'), FakeResponse(text='ok')])
     client = HttpClient(session, Middleware())

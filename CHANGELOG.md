@@ -4,6 +4,16 @@ All notable changes to this project are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and this project
 adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Fixed
+
+- A hook-driven `retry()` now runs the request middleware again, so `Throttle`
+  paces it like any other request. It skipped the request hooks before, which
+  meant a response hook solving a challenge put a request on the wire outside
+  the `delay` a parser had declared — the site saw twice the rate it was
+  promised. The attempt budget is unaffected: a hook's retry still spends none.
+
 ## [0.0.1] — 2026-09-17
 
 First release, extracted from the scraper it grew in.

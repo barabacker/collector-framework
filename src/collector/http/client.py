@@ -93,10 +93,13 @@ class HttpClient:
         raise AssertionError('unreachable: the loop returns or raises')  # pragma: no cover
 
     async def _attempt(self, method: str, url: str, kwargs: dict[str, Any]) -> Any:
-        for request_hook in self._middleware.request_middleware:
-            await request_hook(method, url, kwargs)
-
         async def do_request() -> Any:
+            # Request hooks run per round trip, not per attempt. A hook that
+            # solves a challenge and calls retry() is sending another request to
+            # the site, and Throttle has to pace that one too — ``delay`` is a
+            # ceiling on what the site sees, not on what the retry policy does.
+            for request_hook in self._middleware.request_middleware:
+                await request_hook(method, url, kwargs)
             return await self._session.request(cast('Any', method), url, **kwargs)
 
         response = await do_request()
