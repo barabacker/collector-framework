@@ -444,6 +444,44 @@ async def test_an_abandoned_stream_leaves_the_crawl_running(ctx_factory):
     assert run_task.cancelled()
 
 
+async def test_a_stopped_crawl_does_not_report_itself_as_done(ctx_factory):
+    """'done' means the queue drained. A consumer that walked away is not that."""
+
+    class _Endless(BaseParser):
+        name = 'endless_reason'
+        start_urls = [PAGE_1]
+
+        async def parse(self, response: Any):
+            yield {'tick': True}
+            yield self.request(PAGE_1)
+
+    ctx, _ = ctx_factory(FakeHttp())
+    crawler = Crawler(_Endless(ctx))
+
+    async for _item in crawler.stream():
+        break
+    await crawler.aclose()
+
+    assert crawler.stats.reason == 'cancelled'
+
+
+async def test_a_crawl_cancelled_from_outside_says_so(ctx_factory):
+    class _SlowHttp(FakeHttp):
+        async def request(self, method: str, url: str, **kwargs: Any) -> Any:
+            await asyncio.sleep(10)
+            raise AssertionError('never reached')  # pragma: no cover
+
+    ctx, _ = ctx_factory(_SlowHttp())
+    crawler = Crawler(_TwoPages(ctx))
+    task = asyncio.create_task(crawler.run())
+    await asyncio.sleep(0)
+    task.cancel()
+    with pytest.raises(asyncio.CancelledError):
+        await task
+
+    assert crawler.stats.reason == 'cancelled'
+
+
 async def test_stream_respects_max_requests(ctx_factory):
     class _Capped(_TwoPages):
         settings = replace(_TwoPages.settings, max_requests=1)

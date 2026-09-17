@@ -40,7 +40,9 @@ class Stats:
     items: int = 0
     started_at: float = 0.0
     finished_at: float | None = None
-    #: Why the crawl ended: ``'done'`` (the queue drained) or ``'max_requests'``.
+    #: Why the crawl ended: ``'done'`` (the queue drained), ``'max_requests'``
+    #: (the ceiling was reached) or ``'cancelled'`` (something stopped it — a
+    #: consumer that broke out of ``stream()``, or a cancel from outside).
     reason: str = 'done'
 
     @property
@@ -165,6 +167,12 @@ class Crawler:
         workers = [asyncio.create_task(self._worker(queue, limit)) for _ in range(n_workers)]
         try:
             await queue.join()
+        except asyncio.CancelledError:
+            # A crawl stopped from outside did not finish, and reporting 'done'
+            # for it would be a lie a caller acts on — this is the state a
+            # consumer's ``break`` leaves behind.
+            self.stats.reason = 'cancelled'
+            raise
         finally:
             # In a finally because a crawl can also end by being cancelled from
             # the outside, and workers left running would outlive the session

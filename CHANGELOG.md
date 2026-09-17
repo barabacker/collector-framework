@@ -14,6 +14,10 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Fixed
 
+- `Stats.reason` is `'cancelled'` for a crawl that was stopped rather than
+  finished — a consumer breaking out of `stream()`, or a cancel from outside.
+  It said `'done'` before, which is what a drained queue says, so a caller
+  could not tell a complete crawl from an abandoned one.
 - `Response.selector()` builds its `Selector` once and reuses it. It re-parsed
   the markup on every call, so the ordinary shape of a parse — query the items,
   then query the next-page link — parsed the same page twice.
