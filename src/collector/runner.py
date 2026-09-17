@@ -1,10 +1,19 @@
-"""Bridge between the async crawl engine and synchronous callers.
+"""Where a crawl is assembled, and the bridge to synchronous callers.
+
+Everything a run needs — the HTTP client the parser declares, the context, the
+parser instance, the crawler around it — is put together in exactly one place:
+:func:`open_crawler`. The other three entry points are conveniences over it, so
+there is no second copy of the assembly to drift.
+
+    open_crawler()              owns the session for as long as it is used
+      └── crawl()               run to completion, async
+            └── run_parser()    the same, for a caller with no event loop
+                  └── collect() the same, handing back the items
 
 A crawl is asynchronous, but the thing that starts it usually is not — a CLI, a
-cron entry, an RQ task. ``run_parser`` builds the HTTP client the parser
-declares, runs the crawl under ``asyncio.run`` and hands back the
-:class:`~collector.crawler.Crawler`, which carries the stats, the failures and
-the parser instance itself.
+cron entry, an RQ task — which is what ``run_parser`` is for. All four hand back
+the :class:`~collector.crawler.Crawler`, which carries the stats, the failures
+and the parser instance itself.
 """
 
 from __future__ import annotations
@@ -21,46 +30,6 @@ from collector.http.factory import build_http_client
 from collector.spider import BaseParser, ParserContext
 
 logger = logging.getLogger(__name__)
-
-
-async def crawl(
-    parser_cls: type[BaseParser],
-    *,
-    params: dict[str, str] | None = None,
-    sink: Any | None = None,
-    log: Callable[[str], Awaitable[None]] | None = None,
-    on_item: Callable[[Any], None] | None = None,
-) -> Crawler:
-    """Run a parser to completion and return the crawler that ran it.
-
-    The async entry point: use it when the caller already runs an event loop.
-    """
-    http = build_http_client(parser_cls)
-    async with http:
-        ctx = ParserContext(http=http, params=params or {}, sink=sink, log=log)
-        crawler = Crawler(parser_cls(ctx), on_item=on_item)
-        try:
-            await crawler.run()
-        except Exception as exc:
-            _attach_crawler(exc, crawler)
-            raise
-    return crawler
-
-
-def _attach_crawler(exc: BaseException, crawler: Crawler) -> None:
-    """Make a failed crawl's crawler reachable from the exception it raised.
-
-    ``run()`` re-raises the first failure only, and raising drops the crawler
-    with the frame that held it — so a crawl that survived twenty bad pages
-    could report one and lose the other nineteen. They ride out on the
-    exception instead, as ``exc.crawler.errors``.
-    """
-    with contextlib.suppress(AttributeError):
-        # An exception with __slots__ and no __dict__ cannot carry the crawler.
-        # Losing it is bad; masking the error the caller came for is worse.
-        exc.crawler = crawler  # type: ignore[attr-defined]
-    if len(crawler.errors) > 1:
-        exc.add_note(f'{len(crawler.errors)} requests failed in this crawl; see exc.crawler.errors')
 
 
 @asynccontextmanager
@@ -83,6 +52,9 @@ async def open_crawler(
             async for quote in crawler.stream():
                 await save(quote)
             print(crawler.stats)
+
+    It is also the one place a crawl is assembled, so a failure anywhere under
+    it leaves by the same door — with the crawler attached to the exception.
     """
     http = build_http_client(parser_cls)
     async with http:
@@ -101,21 +73,25 @@ async def open_crawler(
             await crawler.aclose()
 
 
-def collect(
+async def crawl(
     parser_cls: type[BaseParser],
     *,
     params: dict[str, str] | None = None,
+    sink: Any | None = None,
     log: Callable[[str], Awaitable[None]] | None = None,
-) -> list[Any]:
-    """Run a crawl and return the items it emitted.
+    on_item: Callable[[Any], None] | None = None,
+) -> Crawler:
+    """Run a parser to completion and return the crawler that ran it.
 
-    For a one-off — a script, a notebook, a test — where writing a sink to get
-    at the items would be ceremony. A long crawl should still stream into a
-    sink rather than pile up in memory.
+    The async entry point: use it when the caller already runs an event loop.
+    A failure propagates with the crawler attached — ``open_crawler`` does that
+    on the way out, and does it once.
     """
-    items: list[Any] = []
-    run_parser(parser_cls, params=params, log=log, on_item=items.append)
-    return items
+    async with open_crawler(
+        parser_cls, params=params, sink=sink, log=log, on_item=on_item
+    ) as crawler:
+        await crawler.run()
+    return crawler
 
 
 def run_parser(
@@ -139,3 +115,39 @@ def run_parser(
             logger.info('[%s] %s', parser_cls.name, message)
 
     return asyncio.run(crawl(parser_cls, params=params, sink=sink, log=log, on_item=on_item))
+
+
+def collect(
+    parser_cls: type[BaseParser],
+    *,
+    params: dict[str, str] | None = None,
+    log: Callable[[str], Awaitable[None]] | None = None,
+) -> list[Any]:
+    """Run a crawl and return the items it emitted.
+
+    For a one-off — a script, a notebook, a test — where writing a sink to get
+    at the items would be ceremony. A long crawl should still stream into a
+    sink rather than pile up in memory.
+    """
+    items: list[Any] = []
+    run_parser(parser_cls, params=params, log=log, on_item=items.append)
+    return items
+
+
+def _attach_crawler(exc: BaseException, crawler: Crawler) -> None:
+    """Make a failed crawl's crawler reachable from the exception it raised.
+
+    ``run()`` re-raises the first failure only, and raising drops the crawler
+    with the frame that held it — so a crawl that survived twenty bad pages
+    could report one and lose the other nineteen. They ride out on the
+    exception instead, as ``exc.crawler.errors``.
+
+    Called from ``open_crawler`` alone. Calling it twice on its way up a nested
+    stack of entry points would note the same failure count twice.
+    """
+    with contextlib.suppress(AttributeError):
+        # An exception with __slots__ and no __dict__ cannot carry the crawler.
+        # Losing it is bad; masking the error the caller came for is worse.
+        exc.crawler = crawler  # type: ignore[attr-defined]
+    if len(crawler.errors) > 1:
+        exc.add_note(f'{len(crawler.errors)} requests failed in this crawl; see exc.crawler.errors')

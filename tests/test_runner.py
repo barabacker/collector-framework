@@ -162,6 +162,17 @@ def test_a_failed_crawl_carries_its_crawler_out_on_the_exception(monkeypatch):
     assert any('3 requests failed' in note for note in excinfo.value.__notes__)
 
 
+def test_the_failure_count_is_noted_once_not_once_per_entry_point(monkeypatch):
+    """crawl() runs inside open_crawler(); only one of them may annotate."""
+    _patch_client(monkeypatch)
+
+    with pytest.raises(ValueError) as excinfo:
+        run_parser(_AlwaysFails)
+
+    notes = [note for note in excinfo.value.__notes__ if 'requests failed' in note]
+    assert len(notes) == 1
+
+
 def test_a_single_failure_is_not_annotated_with_a_count(monkeypatch):
     """One error is already the one being raised — a count would be noise."""
     _patch_client(monkeypatch)
