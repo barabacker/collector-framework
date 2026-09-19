@@ -18,6 +18,15 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   the abstract `parse()` did not already enforce. Downstream code renames the
   import; nothing else about the class changed. An application that wants a
   gentler move can alias it itself with `BaseParser = Parser`.
+- `RequestHook` and `ResponseHook` are typed by the awaitable they return
+  rather than declared `async def`. Declaring the call `async def` described an
+  implementation — "this method is a coroutine function" — when all the client
+  needs is something to await, and it formally excluded callables that return
+  an awaitable without being coroutine functions: a hook factory, a
+  `functools.partial` around a coroutine, an object with `__await__`. Those
+  worked but did not match the protocol. Existing `async def` hooks satisfy the
+  new form unchanged, and nothing about this reaches runtime: the protocols are
+  annotations only, with no `runtime_checkable` and no `isinstance` behind them.
 - `Middleware` is gone. `HttpClient` takes `request_hooks` and `response_hooks`
   as two ordered tuples, keyword-only, and exposes them under the same names.
   A container whose only decision was order has been replaced by the order

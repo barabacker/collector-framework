@@ -23,9 +23,14 @@ class RequestHook(Protocol):
 
     Per round trip, not per attempt: a retry — the policy's or a response
     hook's — is another request to the site, and a ``Throttle`` has to pace it.
+
+    Typed by the awaitable it hands back rather than declared ``async def``,
+    which would describe an implementation. All the client needs is something
+    to await, so a hook factory, a ``functools.partial`` around a coroutine or
+    an object with ``__await__`` qualifies as squarely as a plain ``async def``.
     """
 
-    async def __call__(self, method: str, url: str, kwargs: dict[str, Any]) -> None: ...
+    def __call__(self, method: str, url: str, kwargs: dict[str, Any]) -> Awaitable[None]: ...
 
 
 class ResponseHook(Protocol):
@@ -34,15 +39,19 @@ class ResponseHook(Protocol):
     May return the response unchanged, return a different one, or ``await
     retry()`` to re-run the request — after solving an anti-bot challenge, say —
     and return what that produced. A hook's retry spends no attempt budget.
+
+    Typed by the awaitable it hands back, for the reason ``RequestHook`` gives:
+    what the client awaits is the point, and being a coroutine function is one
+    way to provide it rather than the requirement.
     """
 
-    async def __call__(
+    def __call__(
         self,
         response: Any,
         *,
         session: Any,
         retry: Callable[[], Awaitable[Any]],
-    ) -> Any: ...
+    ) -> Awaitable[Any]: ...
 
 
 async def log_request(method: str, url: str, kwargs: dict[str, Any]) -> None:
