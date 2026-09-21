@@ -16,7 +16,7 @@ from collections.abc import AsyncIterator
 from dataclasses import dataclass, field
 from typing import TYPE_CHECKING, Any
 
-from collector.engine.params import read_concurrency, read_max_requests
+from collector.engine.params import read_max_requests, worker_count
 from collector.spider.request import Request
 from collector.spider.response import Response
 
@@ -146,7 +146,7 @@ class Crawler:
 
     def _buffer_size(self) -> int:
         """One parked item per worker: enough to keep them moving, bounded enough to push back."""
-        return max(read_concurrency(self.parser.ctx.params, self.parser.settings.concurrency), 1)
+        return worker_count(self.parser.ctx.params, self.parser.settings.concurrency)
 
     async def run(self) -> Stats:
         """Run the crawl with ``concurrency`` workers; return its ``Stats``.
@@ -164,7 +164,7 @@ class Crawler:
         async for req in parser.start_requests():
             queue.put_nowait(req)
 
-        n_workers = read_concurrency(params, parser.settings.concurrency)
+        n_workers = worker_count(params, parser.settings.concurrency)
         workers = [asyncio.create_task(self._worker(queue, limit)) for _ in range(n_workers)]
         try:
             await queue.join()

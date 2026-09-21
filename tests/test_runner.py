@@ -42,7 +42,9 @@ def _patch_client(monkeypatch) -> FakeHttp:
 
     type(http).__aenter__ = _aenter
     type(http).__aexit__ = _aexit
-    monkeypatch.setattr('collector.engine.runner.build_http_client', lambda parser_cls: http)
+    monkeypatch.setattr(
+        'collector.engine.runner.build_http_client', lambda parser_cls, **kwargs: http
+    )
     return http
 
 

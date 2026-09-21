@@ -26,6 +26,7 @@ from contextlib import asynccontextmanager
 from typing import Any
 
 from collector.engine.crawler import Crawler
+from collector.engine.params import worker_count
 from collector.http.client import build_http_client
 from collector.spider.parser import Parser, ParserContext
 
@@ -55,11 +56,15 @@ async def open_crawler(
     It is also the one place a crawl is assembled, so a failure anywhere under
     it leaves by the same door — with the crawler attached to the exception.
     """
-    http = build_http_client(parser_cls)
+    # The session's connection pool is sized here rather than inside the
+    # builder, because only this side knows the params that can raise the
+    # worker count above what the parser declared.
+    params = params or {}
+    http = build_http_client(
+        parser_cls, concurrency=worker_count(params, parser_cls.settings.concurrency)
+    )
     async with http:
-        crawler = Crawler(
-            parser_cls(ParserContext(http=http, params=params or {}, sink=sink, log=log))
-        )
+        crawler = Crawler(parser_cls(ParserContext(http=http, params=params, sink=sink, log=log)))
         try:
             yield crawler
         except Exception as exc:

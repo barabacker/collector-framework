@@ -8,7 +8,7 @@ from __future__ import annotations
 
 import pytest
 
-from collector.engine.params import read_concurrency, read_max_requests
+from collector.engine.params import read_concurrency, read_max_requests, worker_count
 
 
 @pytest.mark.parametrize(
@@ -41,3 +41,20 @@ def test_read_concurrency_falls_back_to_the_default(params, expected):
 )
 def test_read_max_requests(params, default, expected):
     assert read_max_requests(params, default) == expected
+
+
+@pytest.mark.parametrize(
+    ('params', 'default', 'expected'),
+    [
+        ({}, 4, 4),
+        ({'concurrency': '10'}, 4, 10),
+        # A floor of one belongs to the question: zero workers means a queue
+        # nobody drains, and the crawl waits on it for ever.
+        ({}, 0, 1),
+        ({}, -3, 1),
+        ({'concurrency': '0'}, 0, 1),
+        ({'concurrency': 'many'}, 0, 1),
+    ],
+)
+def test_worker_count_never_returns_less_than_one(params, default, expected):
+    assert worker_count(params, default) == expected

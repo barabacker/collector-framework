@@ -169,21 +169,27 @@ def _retry_after_seconds(response: Any) -> float | None:
     return max((when - datetime.now(UTC)).total_seconds(), 0.0)
 
 
-def build_http_client(parser_cls: type[Parser]) -> HttpClient:
+def build_http_client(parser_cls: type[Parser], *, concurrency: int | None = None) -> HttpClient:
     """Assemble an ``HttpClient`` from what ``parser_cls.settings`` declares.
 
     The two orders are the whole of it, and both read as written: log the
     request first, then pace it, then let the parser's own hooks have it; and on
     the way back the parser's hooks first, with logging last so that it reports
     the response actually returned.
+
+    ``concurrency`` is how many workers the crawl will really run, which the
+    params can raise above what ``settings`` declares — so the caller that
+    knows both works it out and passes it, and the session is sized to match.
+    Left out, the declared value stands.
     """
     settings = parser_cls.settings
+    workers = max(settings.concurrency if concurrency is None else concurrency, 1)
     request_hooks: list[RequestHook] = [log_request]
     if settings.delay or settings.delay_jitter:
         request_hooks.append(Throttle(settings.delay, settings.delay_jitter))
     request_hooks.extend(settings.request_hooks)
 
-    session: AsyncSession[Any] = AsyncSession(**session_kwargs(parser_cls, settings))
+    session: AsyncSession[Any] = AsyncSession(**session_kwargs(parser_cls, settings, workers))
     return HttpClient(
         session,
         request_hooks=tuple(request_hooks),
@@ -192,9 +198,15 @@ def build_http_client(parser_cls: type[Parser]) -> HttpClient:
     )
 
 
-def session_kwargs(parser_cls: type[Parser], settings: Settings) -> dict[str, Any]:
+def session_kwargs(
+    parser_cls: type[Parser], settings: Settings, workers: int = 1
+) -> dict[str, Any]:
     """Translate settings into ``AsyncSession`` keyword arguments."""
-    kwargs: dict[str, Any] = {}
+    # One curl client per worker. The session defaults to ten of them and queues
+    # the rest, so without this a crawl declaring more workers than that got
+    # them, and they waited on the pool instead of on the site — `concurrency`
+    # silently stopped meaning anything past ten.
+    kwargs: dict[str, Any] = {'max_clients': workers}
     if settings.impersonate is not None:
         kwargs['impersonate'] = settings.impersonate
     if settings.timeout is not None:

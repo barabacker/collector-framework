@@ -519,3 +519,28 @@ async def test_a_slow_consumer_holds_the_crawl_back(ctx_factory):
         await asyncio.sleep(0)
 
     assert seen == 5
+
+
+async def test_a_crawl_declaring_no_workers_still_runs(ctx_factory):
+    """Zero workers meant a queue nobody drained, and run() waited on it for ever."""
+
+    class _NoWorkers(_TwoPages):
+        settings = replace(_TwoPages.settings, concurrency=0)
+
+    ctx, _ = ctx_factory(FakeHttp())
+    async with asyncio.timeout(5):
+        stats = await Crawler(_NoWorkers(ctx)).run()
+
+    assert stats.items == 2
+    assert stats.reason == 'done'
+
+
+async def test_a_bad_concurrency_param_cannot_stall_the_crawl(ctx_factory):
+    """The param falls back to Settings, which may itself be unusable."""
+
+    class _NoWorkers(_TwoPages):
+        settings = replace(_TwoPages.settings, concurrency=0)
+
+    ctx, _ = ctx_factory(FakeHttp(), params={'concurrency': 'lots'})
+    async with asyncio.timeout(5):
+        assert (await Crawler(_NoWorkers(ctx)).run()).items == 2

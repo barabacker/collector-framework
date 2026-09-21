@@ -14,6 +14,12 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Changed
 
+- `build_http_client()` takes a keyword-only `concurrency`: the worker count
+  the crawl will really run, which the params can raise above what `Settings`
+  declares. `open_crawler()` works it out and passes it, because only that side
+  sees both. Left out, the declared value stands, so a direct caller is
+  unaffected.
+
 - `BaseParser` is now `Parser`. The `Base` prefix said nothing the `ABC` and
   the abstract `parse()` did not already enforce. Downstream code renames the
   import; nothing else about the class changed. An application that wants a
@@ -101,6 +107,19 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Fixed
 
+- `concurrency` above ten does something again. The HTTP session's connection
+  pool (`curl_cffi`'s `max_clients`) defaults to ten and was never set, so a
+  crawl declaring twenty workers got twenty — and ten of them waited on the
+  pool rather than on the site. Measured against a local server, twenty
+  workers took exactly as long as ten and forty took the same again; the
+  session is now sized to the worker count and each is the batch it should be.
+  `Settings.session_kwargs` still overrides it for anyone who wants a pool
+  narrower than the crawl.
+- A crawl declaring no workers no longer hangs. `Settings(concurrency=0)` —
+  or a bad `concurrency` param falling back to it — started zero workers and
+  then waited on a queue nobody was draining, for ever. The worker count is
+  worked out in one place now, `worker_count()`, with a floor of one; it was
+  being derived in three, and only two of them had that floor.
 - `Stats.reason` is `'cancelled'` for a crawl that was stopped rather than
   finished — a consumer breaking out of `stream()`, or a cancel from outside.
   It said `'done'` before, which is what a drained queue says, so a caller

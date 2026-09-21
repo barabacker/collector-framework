@@ -63,7 +63,11 @@ def _with(**kwargs: Any) -> type[Parser]:
 
 def test_defaults_impersonate_a_browser_and_set_a_timeout(captured):
     build_http_client(_Bare)
-    assert captured['session_kwargs'] == {'impersonate': 'chrome', 'timeout': 30.0}
+    assert captured['session_kwargs'] == {
+        'impersonate': 'chrome',
+        'timeout': 30.0,
+        'max_clients': 1,
+    }
 
 
 def test_transport_settings_reach_the_session(captured):
@@ -80,12 +84,14 @@ def test_transport_settings_reach_the_session(captured):
         'timeout': 5.0,
         'proxy': 'http://127.0.0.1:8080',
         'headers': {'Accept-Language': 'ru'},
+        'max_clients': 1,
     }
 
 
 def test_impersonate_none_is_omitted_rather_than_passed(captured):
     build_http_client(_with(impersonate=None, timeout=None))
-    assert captured['session_kwargs'] == {}
+    # max_clients is always sent: the pool has to match the worker count.
+    assert captured['session_kwargs'] == {'max_clients': 1}
 
 
 def test_session_kwargs_is_the_escape_hatch_and_wins(captured):
@@ -167,3 +173,26 @@ def test_a_subclass_narrows_its_parents_settings(captured):
     build_http_client(_Child)
     assert captured['session_kwargs']['timeout'] == 1.0
     assert _Child.settings.concurrency == 4
+
+
+def test_the_pool_is_sized_to_the_declared_concurrency(captured):
+    """Ten is curl's default, and a crawl declaring more used to queue on it."""
+    build_http_client(_with(concurrency=20))
+    assert captured['session_kwargs']['max_clients'] == 20
+
+
+def test_the_pool_follows_the_worker_count_the_caller_worked_out(captured):
+    """Params can raise concurrency past what Settings declared; the pool follows."""
+    build_http_client(_with(concurrency=1), concurrency=8)
+    assert captured['session_kwargs']['max_clients'] == 8
+
+
+def test_the_pool_never_drops_below_one(captured):
+    build_http_client(_with(concurrency=0))
+    assert captured['session_kwargs']['max_clients'] == 1
+
+
+def test_session_kwargs_still_overrides_the_pool(captured):
+    """The escape hatch wins over what the worker count would have asked for."""
+    build_http_client(_with(concurrency=20, session_kwargs={'max_clients': 3}))
+    assert captured['session_kwargs']['max_clients'] == 3

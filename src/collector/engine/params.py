@@ -33,6 +33,18 @@ def read_concurrency(params: dict[str, str], default: int) -> int:
     return value if value > 0 else default
 
 
+def worker_count(params: dict[str, str], default: int) -> int:
+    """How many workers a crawl will actually run.
+
+    The one answer to that question. It was being worked out in three places —
+    the crawl, its stream buffer and the HTTP session's pool — and they did not
+    agree: a crawl declaring no workers at all got zero of them and then waited
+    on a queue nobody was draining. A floor of one belongs to the question, not
+    to whichever caller remembered it.
+    """
+    return max(read_concurrency(params, default), 1)
+
+
 def read_max_requests(params: dict[str, str], default: int | None) -> int | None:
     """Read ``max_requests`` from the params. ``None`` means no ceiling.
 
