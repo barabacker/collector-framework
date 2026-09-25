@@ -41,7 +41,9 @@ browser impersonation via `curl_cffi` for sites that fingerprint TLS.
 - **`Crawler`** — declarative: `parse()` is an async generator that yields a
   `Request` to follow or anything else to emit it as an item, and
   `start_requests()` covers a start that a URL cannot express — a POST, or
-  per-start metadata. It holds no run state of its own.
+  per-start metadata. It holds no run state of its own. `closed(stats)` runs
+  once the crawl is over — cleanly, on `max_requests`, cancelled or failed —
+  the one place to release something opened in `__init__`.
 - **`Crawl`** — the engine, and what running a crawler gives back. It owns the
   queue and the `concurrency` workers, collects per-request errors instead of
   killing a worker, re-raises the first at the end, and carries `stats`,

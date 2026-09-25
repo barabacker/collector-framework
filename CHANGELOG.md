@@ -11,6 +11,10 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 - `Response.headers` — the response headers, alongside `status` and `text`. A
   crawler reading a rate limit or a content type had to reach into `raw`, which
   is meant for what this wrapper does not cover.
+- `Crawler.closed(stats)` — an optional hook run once the crawl is over,
+  whatever `stats.reason` turns out to be. No-op by default; override it to
+  release something opened in `__init__` — the one place `process_item()`
+  running per item cannot cover.
 
 ### Changed
 

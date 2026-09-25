@@ -17,6 +17,7 @@ from collector.crawler.response import Response
 from collector.settings import Settings
 
 if TYPE_CHECKING:
+    from collector.engine.crawl import Stats
     from collector.http.client import HttpClient
 
 
@@ -114,4 +115,13 @@ class Crawler(ABC):
         item to ``self.ctx.sink`` and to keep whatever counters it needs. The
         crawl's own ``stats.items`` is counted by the crawl and stays accurate
         whether or not an override calls ``super()``.
+        """
+
+    async def closed(self, stats: Stats) -> None:  # noqa: B027 — optional hook
+        """Run once the crawl is over. A no-op here; override to release a resource.
+
+        Always runs — on a clean finish, on ``max_requests``, on a cancelled
+        crawl and on one that ends in an error — so a crawler that opened
+        something in ``__init__`` has exactly one place to close it, whatever
+        ``stats.reason`` turns out to be.
         """

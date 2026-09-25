@@ -224,6 +224,40 @@ async def test_stats_count_errors_alongside_the_error_list(ctx_factory):
     assert crawl.stats.items == 0
 
 
+# ── lifecycle ────────────────────────────────────────────────────────────────
+
+
+async def test_closed_is_called_with_the_final_stats(ctx_factory):
+    seen: list[Any] = []
+
+    class _Tracking(_TwoPages):
+        async def closed(self, stats: Any) -> None:
+            seen.append(stats)
+
+    ctx, _ = ctx_factory(FakeHttp())
+    crawl = Crawl(_Tracking(ctx))
+    stats = await crawl.run()
+
+    assert seen == [stats]
+
+
+async def test_closed_runs_even_when_the_crawl_fails(ctx_factory):
+    """A crawler that opened a resource in __init__ still needs it closed."""
+    seen: list[Any] = []
+
+    class _Tracking(_FailingBoth):
+        async def closed(self, stats: Any) -> None:
+            seen.append(stats)
+
+    ctx, _ = ctx_factory(FakeHttp())
+    crawl = Crawl(_Tracking(ctx))
+
+    with pytest.raises(ValueError):
+        await crawl.run()
+
+    assert seen == [crawl.stats]
+
+
 # ── concurrency ─────────────────────────────────────────────────────────────
 
 

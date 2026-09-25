@@ -183,6 +183,10 @@ class Crawl:
             with contextlib.suppress(asyncio.CancelledError):
                 await asyncio.gather(*workers, return_exceptions=True)
             self.stats.finished_at = time.monotonic()
+            # Always, regardless of how the crawl ended, and before errors are
+            # raised below — a crawler that opened something in __init__ still
+            # needs it closed even when the crawl itself is about to fail.
+            await crawler.closed(self.stats)
 
         if self.errors:
             raise self.errors[0][1]
