@@ -13,7 +13,7 @@ uv run python examples/quotes.py
 | [`json_api.py`](json_api.py) | A JSON API: per-request `params`, a second callback for a differently-shaped page, `metadata` riding along. |
 | [`streaming.py`](streaming.py) | `open_crawl()` + `stream()`: take items as they arrive, `break` when you have enough, and the crawl stops with you. |
 | [`pipeline.py`](pipeline.py) | `process_item()` and `sink`: writing items somewhere, and reading the run's own counters back off `crawl.crawler`. |
-| [`errors.py`](errors.py) | A bad page is collected, not fatal — and every failure leaves on the exception as `exc.crawl.errors`. |
+| [`errors.py`](errors.py) | A bad page is collected, not fatal — and every failure leaves on a `CrawlError` as `exc.crawl.errors`. |
 | [`hooks.py`](hooks.py) | Request and response hooks, including one that answers a 401 by authenticating the session and asking again. |
 | [`tuning.py`](tuning.py) | `Settings`: pacing, concurrency, limits and retries, and how a run's `params` override two of them. |
 

@@ -47,7 +47,10 @@ browser impersonation via `curl_cffi` for sites that fingerprint TLS.
 - **`Crawl`** — the engine, and what running a crawler gives back. It owns the
   queue and the `concurrency` workers, collects per-request errors instead of
   killing a worker, re-raises the first at the end, and carries `stats`,
-  `errors` and the `crawler` itself once the run is over.
+  `errors` and the `crawler` itself once the run is over. Through
+  `run_crawler()` / `crawl()` / `collect()` / `open_crawl()`, that failure
+  arrives as a `CrawlError` — the crawl on `.crawl`, the original failure
+  chained as `.__cause__`.
 - **`max_requests`** — a safety valve. Without a ceiling, a bug in pagination
   crawls forever with nothing to stop it; on reaching it the crawl ends
   cleanly with `stats.reason == 'max_requests'`.

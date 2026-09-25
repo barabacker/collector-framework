@@ -49,6 +49,7 @@ def test_the_root_exports_what_a_crawler_author_writes():
         'RetryPolicy',
         'DEFAULT_RETRY_STATUSES',
         'Crawl',
+        'CrawlError',
         'Stats',
         'open_crawl',
         'crawl',

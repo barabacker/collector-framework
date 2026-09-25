@@ -53,6 +53,24 @@ class Stats:
         return end - self.started_at
 
 
+class CrawlError(Exception):
+    """A crawl failed. The original failure is chained as ``__cause__``.
+
+    ``crawl`` carries the stats and every failure the crawl collected, not
+    only the one that ends up here — a crawl that survived twenty bad pages
+    reports one on ``__cause__`` and all twenty on ``crawl.errors``.
+    """
+
+    def __init__(self, crawl: Crawl) -> None:
+        count = len(crawl.errors)
+        super().__init__(
+            f'{count} requests failed in this crawl; see .crawl.errors'
+            if count > 1
+            else 'a request failed in this crawl; see .crawl for the request and its stats'
+        )
+        self.crawl = crawl
+
+
 @dataclass(slots=True)
 class Crawl:
     """Runs one crawler to completion and holds everything that run produced.

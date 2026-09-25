@@ -6,9 +6,9 @@ re-raise the first failure, so a bad page cannot pass silently either.
 
 Which leaves the problem this example is really about: raising drops the crawl
 with the frame that held it, so a crawl that survived twenty bad pages would
-report one and lose nineteen. They ride out on the exception instead, as
+report one and lose nineteen. They ride out on a ``CrawlError`` instead, as
 ``exc.crawl`` — with the stats, and every failure paired with the request that
-caused it.
+caused it. The original failure is still there too, as ``exc.__cause__``.
 
 A retryable status is *not* a failure: 429 and the 5xx family are retried inside
 the HTTP client, and once the attempt budget is spent the response is handed to
@@ -22,7 +22,7 @@ from __future__ import annotations
 
 from typing import Any
 
-from collector import Crawler, Response, RetryPolicy, Settings, run_crawler
+from collector import Crawler, CrawlError, Response, RetryPolicy, Settings, run_crawler
 
 BASE = 'https://mockhttp.org'
 
@@ -50,9 +50,9 @@ class Strict(Crawler):
 def main() -> None:
     try:
         crawl = run_crawler(Strict)
-    except Exception as exc:  # noqa: BLE001 — showing what arrives, not handling it
+    except CrawlError as exc:
         crawl = exc.crawl
-        print(f'raised: {type(exc).__name__}: {exc}')
+        print(f'raised: {exc} (cause: {exc.__cause__!r})')
 
     print(crawl.stats)
     print(f'\n{len(crawl.errors)} of {crawl.stats.requests} requests failed:')

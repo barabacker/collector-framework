@@ -24,6 +24,15 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Changed
 
+- **Behaviour change:** a failed crawl now raises `CrawlError` — carrying the
+  `Crawl` on `.crawl`, exactly as before — instead of re-raising the original
+  exception with `.crawl` bolted onto it. The original failure is chained as
+  `.__cause__`, so `except ValueError` around `run_crawler()` no longer
+  catches a crawl failure; catch `CrawlError` and inspect `.__cause__`
+  instead. Attaching an arbitrary attribute to an arbitrary exception worked,
+  but silently did nothing on an exception with `__slots__` and no `__dict__`
+  — a dedicated exception type has neither problem, and can carry a proper
+  message instead of a bolted-on note.
 - `Response.follow()` now forwards to `crawler.request()` instead of building
   its own `Request`. The two used to duplicate the same field list and
   quietly disagree about what a bare `callback=None` means: `.request()`

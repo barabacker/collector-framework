@@ -19,14 +19,13 @@ and the crawler instance itself.
 from __future__ import annotations
 
 import asyncio
-import contextlib
 import logging
 from collections.abc import AsyncIterator, Awaitable, Callable
 from contextlib import asynccontextmanager
 from typing import Any
 
 from collector.crawler.crawler import Crawler, CrawlerContext
-from collector.engine.crawl import Crawl
+from collector.engine.crawl import Crawl, CrawlError
 from collector.engine.params import worker_count
 from collector.http.client import build_http_client
 
@@ -54,7 +53,8 @@ async def open_crawl(
             print(crawl.stats)
 
     It is also the one place a crawl is assembled, so a failure anywhere under
-    it leaves by the same door — with the crawl attached to the exception.
+    it leaves by the same door — wrapped in a :class:`~collector.engine.crawl.CrawlError`
+    carrying the crawl, with the original failure chained as its ``__cause__``.
     """
     # The session's connection pool is sized here rather than inside the
     # builder, because only this side knows the params that can raise the
@@ -68,8 +68,7 @@ async def open_crawl(
         try:
             yield crawl
         except Exception as exc:
-            _attach_crawl(exc, crawl)
-            raise
+            raise CrawlError(crawl) from exc
         finally:
             # Before the session closes: a consumer that broke out of stream()
             # may have left the crawl running, and its workers hold that session.
@@ -86,8 +85,8 @@ async def crawl(
     """Run a crawler to completion and return the crawl that ran it.
 
     The async entry point: use it when the caller already runs an event loop.
-    A failure propagates with the crawl attached — ``open_crawl`` does that
-    on the way out, and does it once.
+    A failure surfaces as a :class:`~collector.engine.crawl.CrawlError` — ``open_crawl``
+    wraps it on the way out, and does it once.
     """
     async with open_crawl(crawler_cls, params=params, sink=sink, log=log) as run:
         await run.run()
@@ -148,22 +147,3 @@ def _default_log(crawler_cls: type[Crawler]) -> Callable[[str], Awaitable[None]]
         logger.info('[%s] %s', crawler_cls.name, message)
 
     return log
-
-
-def _attach_crawl(exc: BaseException, crawl: Crawl) -> None:
-    """Make a failed run's ``Crawl`` reachable from the exception it raised.
-
-    ``run()`` re-raises the first failure only, and raising drops the crawl
-    with the frame that held it — so a crawl that survived twenty bad pages
-    could report one and lose the other nineteen. They ride out on the
-    exception instead, as ``exc.crawl.errors``.
-
-    Called from ``open_crawl`` alone. Calling it twice on its way up a nested
-    stack of entry points would note the same failure count twice.
-    """
-    with contextlib.suppress(AttributeError):
-        # An exception with __slots__ and no __dict__ cannot carry the crawl.
-        # Losing it is bad; masking the error the caller came for is worse.
-        exc.crawl = crawl  # type: ignore[attr-defined]
-    if len(crawl.errors) > 1:
-        exc.add_note(f'{len(crawl.errors)} requests failed in this crawl; see exc.crawl.errors')

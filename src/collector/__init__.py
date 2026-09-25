@@ -25,7 +25,7 @@ re-exported here. The import you reach for says which of the two you are doing.
 from __future__ import annotations
 
 from collector.crawler import Crawler, CrawlerContext, Request, Response
-from collector.engine import Crawl, Stats, collect, crawl, open_crawl, run_crawler
+from collector.engine import Crawl, CrawlError, Stats, collect, crawl, open_crawl, run_crawler
 from collector.settings import DEFAULT_RETRY_STATUSES, RetryPolicy, Settings
 
 __version__ = '0.0.1'
@@ -35,6 +35,7 @@ __all__ = [
     #: is a crawler's decision, and writing the default out by hand invites drift.
     'DEFAULT_RETRY_STATUSES',
     'Crawl',
+    'CrawlError',
     'Crawler',
     'CrawlerContext',
     'Request',

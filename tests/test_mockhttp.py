@@ -49,6 +49,7 @@ from collector import (
     Crawl,
     Crawler,
     CrawlerContext,
+    CrawlError,
     Response,
     RetryPolicy,
     Settings,
@@ -254,10 +255,11 @@ def test_a_transport_error_spends_the_same_budget_and_then_fails_the_crawl() -> 
         async def parse(self, response: Response) -> Any:
             yield {'status': response.status}
 
-    with pytest.raises(RequestException) as raised:
+    with pytest.raises(CrawlError) as raised:
         run_crawler(Slow)
 
     assert len(trips) == 2
+    assert isinstance(raised.value.__cause__, RequestException)
     # The crawl rides out on the exception, with the failure still attached.
     crawl = raised.value.crawl
     assert crawl.stats.errors == 1

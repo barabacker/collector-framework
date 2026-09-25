@@ -8,7 +8,7 @@ from typing import Any
 import pytest
 from tests.conftest import FakeHttp
 
-from collector import Crawler, collect, crawl, open_crawl, run_crawler
+from collector import Crawler, CrawlError, collect, crawl, open_crawl, run_crawler
 
 URL = 'https://example.test/'
 
@@ -154,39 +154,40 @@ def test_a_failed_crawl_carries_its_crawl_out_on_the_exception(monkeypatch):
     """run() re-raises one error; the other two must not vanish with the frame."""
     _patch_client(monkeypatch)
 
-    with pytest.raises(ValueError) as excinfo:
+    with pytest.raises(CrawlError) as excinfo:
         run_crawler(_AlwaysFails)
 
     crawl = excinfo.value.crawl
     assert len(crawl.errors) == 3
     assert crawl.stats.errors == 3
     assert {req.url for req, _ in crawl.errors} == set(_AlwaysFails.start_urls)
-    assert any('3 requests failed' in note for note in excinfo.value.__notes__)
+    assert isinstance(excinfo.value.__cause__, ValueError)
+    assert '3 requests failed' in str(excinfo.value)
 
 
-def test_the_failure_count_is_noted_once_not_once_per_entry_point(monkeypatch):
-    """crawl() runs inside open_crawl(); only one of them may annotate."""
+def test_the_failure_is_wrapped_once_not_once_per_entry_point(monkeypatch):
+    """crawl() runs inside open_crawl(); only the outermost frame may wrap."""
     _patch_client(monkeypatch)
 
-    with pytest.raises(ValueError) as excinfo:
+    with pytest.raises(CrawlError) as excinfo:
         run_crawler(_AlwaysFails)
 
-    notes = [note for note in excinfo.value.__notes__ if 'requests failed' in note]
-    assert len(notes) == 1
+    assert isinstance(excinfo.value.__cause__, ValueError)
+    assert not isinstance(excinfo.value.__cause__, CrawlError)
 
 
-def test_a_single_failure_is_not_annotated_with_a_count(monkeypatch):
+def test_a_single_failure_is_not_described_as_plural(monkeypatch):
     """One error is already the one being raised — a count would be noise."""
     _patch_client(monkeypatch)
 
     class _OneStart(_AlwaysFails):
         start_urls = [URL]
 
-    with pytest.raises(ValueError) as excinfo:
+    with pytest.raises(CrawlError) as excinfo:
         run_crawler(_OneStart)
 
     assert len(excinfo.value.crawl.errors) == 1
-    assert not any('requests failed' in note for note in getattr(excinfo.value, '__notes__', []))
+    assert 'requests failed' not in str(excinfo.value)
 
 
 async def test_open_crawl_streams_and_exposes_stats(monkeypatch):
@@ -235,7 +236,7 @@ async def test_open_crawl_stops_a_crawl_a_consumer_walked_away_from(monkeypatch)
 async def test_open_crawl_attaches_the_crawl_to_a_failure(monkeypatch):
     _patch_client(monkeypatch)
 
-    with pytest.raises(ValueError) as excinfo:
+    with pytest.raises(CrawlError) as excinfo:
         async with open_crawl(_AlwaysFails) as crawl:
             await crawl.run()
 

@@ -8,11 +8,12 @@ a job's free-form strings.
 
 from __future__ import annotations
 
-from collector.engine.crawl import Crawl, Stats
+from collector.engine.crawl import Crawl, CrawlError, Stats
 from collector.engine.runner import collect, crawl, open_crawl, run_crawler
 
 __all__ = [
     'Crawl',
+    'CrawlError',
     'Stats',
     'collect',
     'crawl',
