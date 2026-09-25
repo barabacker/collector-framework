@@ -14,6 +14,16 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Changed
 
+- The engine object a run gives back was also called `Crawler` — the same
+  name the class an author subclasses settles on, below — which would have
+  made every future doc ambiguous about which one a reader meant. It's now
+  `Crawl`: `open_crawler()` is `open_crawl()`, and a failed run's `Crawl`
+  rides out on an exception as `exc.crawl` rather than `exc.crawler`.
+  `collector.spider`, the package the author-facing class lives in, is now
+  `collector.crawler` — it never held a class actually called `Spider` — and
+  `run_parser()` is `run_crawler()` to match. `Crawler.parse()` keeps its
+  name; it describes what the callback does, not what kind of class it's on,
+  and Scrapy uses the same name on its own `Spider` for the same reason.
 - `build_http_client()` takes a keyword-only `concurrency`: the worker count
   the crawl will really run, which the params can raise above what `Settings`
   declares. `open_crawl()` works it out and passes it, because only that side
