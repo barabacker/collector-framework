@@ -62,6 +62,9 @@ browser impersonation via `curl_cffi` for sites that fingerprint TLS.
   is how an anti-bot challenge gets solved without the crawler knowing.
 - **Throttling** — `delay` and `delay_jitter` install a `Throttle` hook that
   spaces requests out behind a lock, so the gap holds with `concurrency > 1`.
+  `AutoThrottle` widens a `Throttle`'s delay on a retryable status and narrows
+  it back on a normal one, between a floor (the declared `delay`) and a
+  `ceiling` you set.
 - **Response helpers** — `status`, `text`, `headers`, `json()`, `urljoin()`,
   `follow()` for a link on the page, and `selector()` (parsel), which parses the
   body once however often you ask for it.

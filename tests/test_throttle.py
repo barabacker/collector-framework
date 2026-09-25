@@ -5,8 +5,9 @@ from __future__ import annotations
 import asyncio
 
 import pytest
+from tests.conftest import FakeResponse
 
-from collector.http import Throttle
+from collector.http import AutoThrottle, Throttle
 
 
 @pytest.fixture
@@ -48,3 +49,57 @@ async def test_jitter_adds_a_bounded_random_extra(clock, monkeypatch):
     for _ in range(2):
         await throttle('GET', 'https://example.test/', {})
     assert clock['t'] == 1.5
+
+
+# ── AutoThrottle ─────────────────────────────────────────────────────────────
+
+
+async def test_autothrottle_widens_the_delay_on_a_retryable_status():
+    throttle = Throttle(delay=1.0)
+    auto = AutoThrottle(throttle, ceiling=10.0)
+
+    response = await auto(FakeResponse(status_code=429), session=None, retry=None)
+
+    assert throttle.delay == 2.0
+    assert response.status_code == 429  # returned unchanged, like any response hook
+
+
+async def test_widening_is_capped_at_the_ceiling():
+    throttle = Throttle(delay=6.0)
+    auto = AutoThrottle(throttle, ceiling=10.0, factor=3.0)
+
+    await auto(FakeResponse(status_code=503), session=None, retry=None)
+
+    assert throttle.delay == 10.0  # 6.0 * 3.0 would be 18.0
+
+
+async def test_autothrottle_narrows_the_delay_on_a_normal_response():
+    throttle = Throttle(delay=1.0)
+    auto = AutoThrottle(throttle, ceiling=10.0)
+    throttle.delay = 4.0  # simulate an earlier widening
+
+    await auto(FakeResponse(status_code=200), session=None, retry=None)
+
+    assert throttle.delay == 2.0
+
+
+async def test_narrowing_never_drops_below_the_floor():
+    """The floor is the delay Settings declared — AutoThrottle never undercuts it."""
+    throttle = Throttle(delay=1.0)
+    auto = AutoThrottle(throttle, ceiling=10.0)
+
+    for _ in range(5):
+        await auto(FakeResponse(status_code=200), session=None, retry=None)
+
+    assert throttle.delay == 1.0
+
+
+async def test_a_custom_status_set_is_honoured():
+    throttle = Throttle(delay=1.0)
+    auto = AutoThrottle(throttle, ceiling=10.0, statuses={403})
+
+    await auto(FakeResponse(status_code=429), session=None, retry=None)
+    assert throttle.delay == 1.0  # 429 isn't in the custom set: no widening
+
+    await auto(FakeResponse(status_code=403), session=None, retry=None)
+    assert throttle.delay == 2.0

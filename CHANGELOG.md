@@ -11,6 +11,12 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 - `Response.headers` — the response headers, alongside `status` and `text`. A
   crawler reading a rate limit or a content type had to reach into `raw`, which
   is meant for what this wrapper does not cover.
+- `AutoThrottle` — a response hook that widens a `Throttle`'s delay on a
+  retryable status (multiplicatively, up to a `ceiling`) and narrows it back
+  toward the declared `delay` on a normal one. Wraps the `Throttle` instance
+  passed to it rather than pacing on its own; `delay` was already a plain
+  attribute, so nothing else needed to change to let something adjust it
+  between requests.
 - `Crawler.closed(stats)` — an optional hook run once the crawl is over,
   whatever `stats.reason` turns out to be. No-op by default; override it to
   release something opened in `__init__` — the one place `process_item()`

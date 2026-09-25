@@ -12,8 +12,10 @@ import asyncio
 import logging
 import random
 import time
-from collections.abc import Awaitable, Callable
+from collections.abc import Awaitable, Callable, Collection
 from typing import Any, Protocol
+
+from collector.settings import DEFAULT_RETRY_STATUSES
 
 logger = logging.getLogger(__name__)
 
@@ -94,3 +96,35 @@ class Throttle:
                 now = time.monotonic()
             gap = self.delay + (random.uniform(0, self.jitter) if self.jitter else 0.0)
             self._next_at = now + gap
+
+
+class AutoThrottle:
+    """Response hook: widen a ``Throttle``'s delay on a retryable status, narrow it back otherwise.
+
+    Wraps an existing ``Throttle`` rather than pacing on its own — ``delay`` is
+    a plain attribute, and this is the only thing that ever writes to it after
+    construction. The floor is whatever the ``Throttle`` was declared with;
+    widening multiplies by ``factor`` up to ``ceiling``, narrowing divides back
+    down, never below that floor.
+    """
+
+    def __init__(
+        self,
+        throttle: Throttle,
+        *,
+        ceiling: float,
+        factor: float = 2.0,
+        statuses: Collection[int] = DEFAULT_RETRY_STATUSES,
+    ) -> None:
+        self._throttle = throttle
+        self._floor = throttle.delay
+        self._ceiling = ceiling
+        self._factor = factor
+        self._statuses = statuses
+
+    async def __call__(self, response: Any, *, session: Any, retry: Any) -> Any:
+        if response.status_code in self._statuses:
+            self._throttle.delay = min(self._throttle.delay * self._factor, self._ceiling)
+        else:
+            self._throttle.delay = max(self._throttle.delay / self._factor, self._floor)
+        return response

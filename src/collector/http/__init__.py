@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from collector.http.client import HttpClient, build_http_client
 from collector.http.hooks import (
+    AutoThrottle,
     RequestHook,
     ResponseHook,
     Throttle,
@@ -13,6 +14,7 @@ from collector.http.hooks import (
 from collector.http.tls import ca_bundle_with_extra_cert
 
 __all__ = [
+    'AutoThrottle',
     'HttpClient',
     'RequestHook',
     'ResponseHook',
