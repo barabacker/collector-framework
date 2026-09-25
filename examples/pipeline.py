@@ -1,11 +1,11 @@
-"""Writing items somewhere: ``process_item()``, ``sink``, and the parser afterwards.
+"""Writing items somewhere: ``process_item()``, ``sink``, and the crawler afterwards.
 
 The framework stores nothing and knows no item schema. An application overrides
 ``process_item()`` and writes to ``ctx.sink`` — whatever it passed in, handed
 back untouched — which is how a database, a file or a queue gets involved
 without this package knowing any of them exist.
 
-Anything the run accumulates lives on the parser, and ``crawl.crawler`` is the
+Anything the run accumulates lives on the crawler, and ``crawl.crawler`` is the
 instance that ran, so a synchronous caller reads its own counters back off it
 when the crawl is over. ``stats.items`` is counted by the crawl instead, so an
 override that forgets ``super()`` cannot corrupt it.
@@ -21,11 +21,11 @@ from collections import Counter
 from pathlib import Path
 from typing import Any
 
-from collector import Parser, ParserContext, Response, Settings, run_parser
+from collector import Crawler, CrawlerContext, Response, Settings, run_crawler
 
 
 class JsonLines:
-    """A sink: anything with the methods the parser below calls."""
+    """A sink: anything with the methods the crawler below calls."""
 
     def __init__(self, path: Path) -> None:
         self._file = path.open('w', encoding='utf-8')
@@ -37,14 +37,14 @@ class JsonLines:
         self._file.close()
 
 
-class Quotes(Parser):
+class Quotes(Crawler):
     name = 'quotes-pipeline'
     start_urls = ['https://quotes.toscrape.com/']
     settings = Settings(delay=0.3, max_requests=3)
 
-    def __init__(self, ctx: ParserContext) -> None:
+    def __init__(self, ctx: CrawlerContext) -> None:
         super().__init__(ctx)
-        # Run state belongs to the parser instance, not to a module global:
+        # Run state belongs to the crawler instance, not to a module global:
         # crawl.crawler is how the caller gets it back.
         self.by_author: Counter[str] = Counter()
 
@@ -75,7 +75,7 @@ def main() -> None:
     out = Path('quotes.jsonl')
     sink = JsonLines(out)
     try:
-        crawl = run_parser(Quotes, sink=sink)
+        crawl = run_crawler(Quotes, sink=sink)
     finally:
         sink.close()
 

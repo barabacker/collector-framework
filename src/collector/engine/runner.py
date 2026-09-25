@@ -1,19 +1,19 @@
 """Where a crawl is assembled, and the bridge to synchronous callers.
 
-Everything a run needs — the HTTP client the parser declares, the context, the
-parser instance, the crawl around it — is put together in exactly one place:
+Everything a run needs — the HTTP client the crawler declares, the context, the
+crawler instance, the crawl around it — is put together in exactly one place:
 :func:`open_crawl`. The other three entry points are conveniences over it, so
 there is no second copy of the assembly to drift.
 
     open_crawl()                owns the session for as long as it is used
       └── crawl()               run to completion, async
-            └── run_parser()    the same, for a caller with no event loop
+            └── run_crawler()   the same, for a caller with no event loop
                   └── collect() the same, handing back the items
 
 A crawl is asynchronous, but the thing that starts it usually is not — a CLI, a
-cron entry, an RQ task — which is what ``run_parser`` is for. All four hand back
+cron entry, an RQ task — which is what ``run_crawler`` is for. All four hand back
 the :class:`~collector.engine.crawl.Crawl`, which carries the stats, the failures
-and the parser instance itself.
+and the crawler instance itself.
 """
 
 from __future__ import annotations
@@ -28,14 +28,14 @@ from typing import Any
 from collector.engine.crawl import Crawl
 from collector.engine.params import worker_count
 from collector.http.client import build_http_client
-from collector.spider.parser import Parser, ParserContext
+from collector.crawler.crawler import Crawler, CrawlerContext
 
 logger = logging.getLogger(__name__)
 
 
 @asynccontextmanager
 async def open_crawl(
-    parser_cls: type[Parser],
+    crawler_cls: type[Crawler],
     *,
     params: dict[str, str] | None = None,
     sink: Any | None = None,
@@ -58,13 +58,13 @@ async def open_crawl(
     """
     # The session's connection pool is sized here rather than inside the
     # builder, because only this side knows the params that can raise the
-    # worker count above what the parser declared.
+    # worker count above what the crawler declared.
     params = params or {}
     http = build_http_client(
-        parser_cls, concurrency=worker_count(params, parser_cls.settings.concurrency)
+        crawler_cls, concurrency=worker_count(params, crawler_cls.settings.concurrency)
     )
     async with http:
-        crawl = Crawl(parser_cls(ParserContext(http=http, params=params, sink=sink, log=log)))
+        crawl = Crawl(crawler_cls(CrawlerContext(http=http, params=params, sink=sink, log=log)))
         try:
             yield crawl
         except Exception as exc:
@@ -77,46 +77,46 @@ async def open_crawl(
 
 
 async def crawl(
-    parser_cls: type[Parser],
+    crawler_cls: type[Crawler],
     *,
     params: dict[str, str] | None = None,
     sink: Any | None = None,
     log: Callable[[str], Awaitable[None]] | None = None,
 ) -> Crawl:
-    """Run a parser to completion and return the crawl that ran it.
+    """Run a crawler to completion and return the crawl that ran it.
 
     The async entry point: use it when the caller already runs an event loop.
     A failure propagates with the crawl attached — ``open_crawl`` does that
     on the way out, and does it once.
     """
-    async with open_crawl(parser_cls, params=params, sink=sink, log=log) as run:
+    async with open_crawl(crawler_cls, params=params, sink=sink, log=log) as run:
         await run.run()
     return run
 
 
-def run_parser(
-    parser_cls: type[Parser],
+def run_crawler(
+    crawler_cls: type[Crawler],
     *,
     params: dict[str, str] | None = None,
     sink: Any | None = None,
     log: Callable[[str], Awaitable[None]] | None = None,
 ) -> Crawl:
-    """Run a parser to completion synchronously; return the crawl that ran it.
+    """Run a crawler to completion synchronously; return the crawl that ran it.
 
-    ``sink`` is whatever the parser's ``process_item()`` expects — the framework
+    ``sink`` is whatever the crawler's ``process_item()`` expects — the framework
     only passes it through. ``log`` defaults to an async wrapper around this
     module's logger.
 
-    Items reach the caller through the parser: override ``process_item()``, keep
+    Items reach the caller through the crawler: override ``process_item()``, keep
     what you need on ``self``, and read it back off ``crawl.crawler``.
     """
     return asyncio.run(
-        crawl(parser_cls, params=params, sink=sink, log=log or _default_log(parser_cls))
+        crawl(crawler_cls, params=params, sink=sink, log=log or _default_log(crawler_cls))
     )
 
 
 def collect(
-    parser_cls: type[Parser],
+    crawler_cls: type[Crawler],
     *,
     params: dict[str, str] | None = None,
     log: Callable[[str], Awaitable[None]] | None = None,
@@ -127,25 +127,25 @@ def collect(
     at the items would be ceremony. A long crawl should still stream into a
     sink rather than pile up in memory.
 
-    It drains ``stream()``, so the parser's own ``process_item()`` still runs
+    It drains ``stream()``, so the crawler's own ``process_item()`` still runs
     and the class handed in runs as itself — no subclass is substituted behind
     the caller's back.
     """
 
     async def drain() -> list[Any]:
         async with open_crawl(
-            parser_cls, params=params, log=log or _default_log(parser_cls)
+            crawler_cls, params=params, log=log or _default_log(crawler_cls)
         ) as run:
             return [item async for item in run.stream()]
 
     return asyncio.run(drain())
 
 
-def _default_log(parser_cls: type[Parser]) -> Callable[[str], Awaitable[None]]:
-    """Tag a parser's log lines with its name and send them to this module's logger."""
+def _default_log(crawler_cls: type[Crawler]) -> Callable[[str], Awaitable[None]]:
+    """Tag a crawler's log lines with its name and send them to this module's logger."""
 
     async def log(message: str) -> None:
-        logger.info('[%s] %s', parser_cls.name, message)
+        logger.info('[%s] %s', crawler_cls.name, message)
 
     return log
 

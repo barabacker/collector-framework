@@ -29,7 +29,7 @@ from collector.http.tls import ca_bundle_with_extra_cert
 from collector.settings import RetryPolicy, Settings
 
 if TYPE_CHECKING:
-    from collector.spider.parser import Parser
+    from collector.crawler.crawler import Crawler
 
 logger = logging.getLogger(__name__)
 
@@ -169,12 +169,12 @@ def _retry_after_seconds(response: Any) -> float | None:
     return max((when - datetime.now(UTC)).total_seconds(), 0.0)
 
 
-def build_http_client(parser_cls: type[Parser], *, concurrency: int | None = None) -> HttpClient:
-    """Assemble an ``HttpClient`` from what ``parser_cls.settings`` declares.
+def build_http_client(crawler_cls: type[Crawler], *, concurrency: int | None = None) -> HttpClient:
+    """Assemble an ``HttpClient`` from what ``crawler_cls.settings`` declares.
 
     The two orders are the whole of it, and both read as written: log the
-    request first, then pace it, then let the parser's own hooks have it; and on
-    the way back the parser's hooks first, with logging last so that it reports
+    request first, then pace it, then let the crawler's own hooks have it; and on
+    the way back the crawler's hooks first, with logging last so that it reports
     the response actually returned.
 
     ``concurrency`` is how many workers the crawl will really run, which the
@@ -182,14 +182,14 @@ def build_http_client(parser_cls: type[Parser], *, concurrency: int | None = Non
     knows both works it out and passes it, and the session is sized to match.
     Left out, the declared value stands.
     """
-    settings = parser_cls.settings
+    settings = crawler_cls.settings
     workers = max(settings.concurrency if concurrency is None else concurrency, 1)
     request_hooks: list[RequestHook] = [log_request]
     if settings.delay or settings.delay_jitter:
         request_hooks.append(Throttle(settings.delay, settings.delay_jitter))
     request_hooks.extend(settings.request_hooks)
 
-    session: AsyncSession[Any] = AsyncSession(**session_kwargs(parser_cls, settings, workers))
+    session: AsyncSession[Any] = AsyncSession(**session_kwargs(crawler_cls, settings, workers))
     return HttpClient(
         session,
         request_hooks=tuple(request_hooks),
@@ -199,7 +199,7 @@ def build_http_client(parser_cls: type[Parser], *, concurrency: int | None = Non
 
 
 def session_kwargs(
-    parser_cls: type[Parser], settings: Settings, workers: int = 1
+    crawler_cls: type[Crawler], settings: Settings, workers: int = 1
 ) -> dict[str, Any]:
     """Translate settings into ``AsyncSession`` keyword arguments."""
     # One curl client per worker. The session defaults to ten of them and queues
@@ -217,9 +217,9 @@ def session_kwargs(
         kwargs['headers'] = dict(settings.headers)
 
     if settings.extra_ca_cert:
-        # Resolved against the file the parser class is defined in, so a site's
-        # certificate can live next to the parser that needs it.
-        cert_path = Path(inspect.getfile(parser_cls)).parent / settings.extra_ca_cert
+        # Resolved against the file the crawler class is defined in, so a site's
+        # certificate can live next to the crawler that needs it.
+        cert_path = Path(inspect.getfile(crawler_cls)).parent / settings.extra_ca_cert
         kwargs['verify'] = ca_bundle_with_extra_cert(str(cert_path))
     elif settings.skip_tls_verify:
         kwargs['verify'] = False

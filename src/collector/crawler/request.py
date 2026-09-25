@@ -7,7 +7,7 @@ from dataclasses import dataclass, field
 from typing import TYPE_CHECKING, Any
 
 if TYPE_CHECKING:
-    from collector.spider.response import Response
+    from collector.crawler.response import Response
 
 #: Fields a request contributes to ``HttpClient.request`` verbatim, in the order
 #: ``http_kwargs()`` reports them. Anything else a site needs is a session-wide
@@ -19,8 +19,8 @@ _TRANSPORT_FIELDS = ('headers', 'params', 'data', 'json', 'cookies')
 class Request:
     """Describes an HTTP request that crawl() must perform.
 
-    ``callback`` receives the :class:`~collector.spider.response.Response` and
-    yields further requests or items; ``None`` means the parser's ``parse()``.
+    ``callback`` receives the :class:`~collector.crawler.response.Response` and
+    yields further requests or items; ``None`` means the crawler's ``parse()``.
     ``metadata`` is carried over to the response untouched.
 
     ``params`` / ``json`` / ``cookies`` sit alongside ``headers`` / ``data``

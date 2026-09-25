@@ -1,6 +1,6 @@
-"""Crawl — the engine that runs a parser: queue, workers, limits, stats.
+"""Crawl — the engine that runs a crawler: queue, workers, limits, stats.
 
-Split out of ``Parser`` so that a parser stays declarative. A parser says
+Split out of ``Crawler`` so that a crawler stays declarative. A crawler says
 *what* to fetch and what to do with an item; the crawl owns everything about
 one run — the queue, the workers, the counters and the failures — and is what
 the caller gets back when the run is over.
@@ -17,11 +17,11 @@ from dataclasses import dataclass, field
 from typing import TYPE_CHECKING, Any
 
 from collector.engine.params import read_max_requests, worker_count
-from collector.spider.request import Request
-from collector.spider.response import Response
+from collector.crawler.request import Request
+from collector.crawler.response import Response
 
 if TYPE_CHECKING:
-    from collector.spider.parser import Parser
+    from collector.crawler.crawler import Crawler
 
 logger = logging.getLogger(__name__)
 
@@ -34,7 +34,7 @@ class Stats:
     """What one crawl did. Times are ``time.monotonic()``, so only gaps mean anything."""
 
     #: Requests taken off the queue and sent. Retries happen inside the HTTP
-    #: client and are invisible here, so this counts *requests the parser
+    #: client and are invisible here, so this counts *requests the crawler
     #: asked for*, not round trips curl made.
     requests: int = 0
     errors: int = 0
@@ -55,15 +55,15 @@ class Stats:
 
 @dataclass(slots=True)
 class Crawl:
-    """Runs one parser to completion and holds everything that run produced.
+    """Runs one crawler to completion and holds everything that run produced.
 
-    An item reaches its consumer two ways, and only two: the parser's own
+    An item reaches its consumer two ways, and only two: the crawler's own
     ``process_item()`` pushes it, and ``stream()`` pulls it. A caller who wants
-    the items without writing an async loop keeps them on the parser and reads
+    the items without writing an async loop keeps them on the crawler and reads
     them back off ``crawl.crawler`` when the run is over.
     """
 
-    crawler: Parser
+    crawler: Crawler
     stats: Stats = field(default_factory=Stats)
     #: Every request that failed, paired with its exception. ``run()`` re-raises
     #: the first, but a crawl that survived twenty failures should show twenty.

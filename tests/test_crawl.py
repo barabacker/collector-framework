@@ -10,13 +10,13 @@ from typing import Any
 import pytest
 from tests.conftest import FakeHttp
 
-from collector import Crawl, Parser, Request
+from collector import Crawl, Crawler, Request
 
 PAGE_1 = 'https://example.test/p1'
 PAGE_2 = 'https://example.test/p2'
 
 
-class _TwoPages(Parser):
+class _TwoPages(Crawler):
     """Emits one item per page and follows a single link from page 1."""
 
     name = 'two_pages'
@@ -28,7 +28,7 @@ class _TwoPages(Parser):
             yield self.request(PAGE_2)
 
 
-class _FailingBoth(Parser):
+class _FailingBoth(Crawler):
     name = 'failing_all'
     start_urls = [PAGE_1, PAGE_2]
 
@@ -67,7 +67,7 @@ async def test_process_item_override_receives_every_item(ctx_factory):
     assert crawl.stats.items == 2
 
 
-async def test_a_sync_caller_reads_its_items_off_the_parser(ctx_factory):
+async def test_a_sync_caller_reads_its_items_off_the_crawler(ctx_factory):
     """The one push path: keep them on self, read them back from crawl.crawler."""
 
     class _Keeping(_TwoPages):
@@ -95,7 +95,7 @@ async def test_item_count_survives_an_override_that_forgets_super(ctx_factory):
 
 
 async def test_callback_metadata_reaches_the_response(ctx_factory):
-    class _WithMeta(Parser):
+    class _WithMeta(Crawler):
         name = 'with_meta'
         start_urls = [PAGE_1]
 
@@ -114,7 +114,7 @@ async def test_callback_metadata_reaches_the_response(ctx_factory):
 async def test_request_fields_reach_the_http_client(ctx_factory):
     """params/json/cookies are per-request, so they must survive the queue."""
 
-    class _Api(Parser):
+    class _Api(Crawler):
         name = 'api'
 
         async def start_requests(self):
@@ -323,7 +323,7 @@ async def test_errors_are_logged_as_they_happen(ctx_factory, caplog):
 # ── stream ──────────────────────────────────────────────────────────────────
 
 
-class _FiveItems(Parser):
+class _FiveItems(Crawler):
     name = 'five'
     start_urls = [PAGE_1]
 
@@ -349,8 +349,8 @@ async def test_stream_yields_across_pages(ctx_factory):
     assert {item['url'] for item in got} == {PAGE_1, PAGE_2}
 
 
-async def test_stream_still_runs_the_parsers_process_item(ctx_factory):
-    """Streaming is another consumer, not a replacement for the parser's hook."""
+async def test_stream_still_runs_the_crawlers_process_item(ctx_factory):
+    """Streaming is another consumer, not a replacement for the crawler's hook."""
     pushed: list[Any] = []
 
     class _Noting(_FiveItems):
@@ -366,7 +366,7 @@ async def test_stream_still_runs_the_parsers_process_item(ctx_factory):
 async def test_stream_raises_after_yielding_what_succeeded(ctx_factory):
     """The crawl's outcome surfaces at the end, exactly as run() does."""
 
-    class _ItemThenFail(Parser):
+    class _ItemThenFail(Crawler):
         name = 'item_then_fail'
         start_urls = [PAGE_1, PAGE_2]
 
@@ -390,7 +390,7 @@ async def test_stream_raises_after_yielding_what_succeeded(ctx_factory):
 async def test_breaking_out_stops_an_endless_crawl(ctx_factory):
     """The whole point of pull: the consumer decides when enough is enough."""
 
-    class _Endless(Parser):
+    class _Endless(Crawler):
         name = 'endless'
         start_urls = [PAGE_1]
 
@@ -422,7 +422,7 @@ async def test_breaking_out_stops_an_endless_crawl(ctx_factory):
 async def test_an_abandoned_stream_leaves_the_crawl_running(ctx_factory):
     """Why aclose() exists: break alone does not finalise the generator."""
 
-    class _Endless(Parser):
+    class _Endless(Crawler):
         name = 'endless_leak'
         start_urls = [PAGE_1]
 
@@ -448,7 +448,7 @@ async def test_an_abandoned_stream_leaves_the_crawl_running(ctx_factory):
 async def test_a_stopped_crawl_does_not_report_itself_as_done(ctx_factory):
     """'done' means the queue drained. A consumer that walked away is not that."""
 
-    class _Endless(Parser):
+    class _Endless(Crawler):
         name = 'endless_reason'
         start_urls = [PAGE_1]
 

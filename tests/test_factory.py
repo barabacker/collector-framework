@@ -1,4 +1,4 @@
-"""build_http_client turns a parser's Settings into a configured client."""
+"""build_http_client turns a crawler's Settings into a configured client."""
 
 from __future__ import annotations
 
@@ -8,11 +8,11 @@ from typing import Any
 
 import pytest
 
-from collector import Parser, RetryPolicy, Settings
+from collector import Crawler, RetryPolicy, Settings
 from collector.http import Throttle, build_http_client, log_request, log_response
 
 
-class _Bare(Parser):
+class _Bare(Crawler):
     name = '_bare'
 
     async def parse(self, response: Any):  # pragma: no cover - never run
@@ -56,7 +56,7 @@ def captured(monkeypatch):
     return seen
 
 
-def _with(**kwargs: Any) -> type[Parser]:
+def _with(**kwargs: Any) -> type[Crawler]:
     # __module__ is what build_http_client resolves a relative cert path against.
     return type('_Configured', (_Bare,), {'settings': Settings(**kwargs), '__module__': __name__})
 
@@ -116,7 +116,7 @@ def test_declared_request_hooks_are_registered(captured):
     assert client.request_hooks == (log_request, _req_hook)
 
 
-def test_hooks_run_in_the_order_the_parser_declared_them(captured):
+def test_hooks_run_in_the_order_the_crawler_declared_them(captured):
     """Both tuples read as written. Response hooks used to come out reversed.
 
     That was the LIFO of the container they were registered with, not anything
@@ -157,7 +157,7 @@ def test_skip_tls_verify_disables_verification(captured):
     assert captured['session_kwargs']['verify'] is False
 
 
-def test_extra_ca_cert_is_resolved_against_the_parser_module(captured):
+def test_extra_ca_cert_is_resolved_against_the_crawler_module(captured):
     build_http_client(_with(extra_ca_cert='certs/site.pem'))
     assert Path(captured['cert_path']) == Path(__file__).parent / 'certs' / 'site.pem'
     assert captured['session_kwargs']['verify'] == '/tmp/fake-bundle.pem'

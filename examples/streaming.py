@@ -19,10 +19,10 @@ import asyncio
 import sys
 from typing import Any
 
-from collector import Parser, Response, Settings, open_crawl
+from collector import Crawler, Response, Settings, open_crawl
 
 
-class Quotes(Parser):
+class Quotes(Crawler):
     name = 'quotes-stream'
     start_urls = ['https://quotes.toscrape.com/']
     settings = Settings(delay=0.3)

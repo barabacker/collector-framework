@@ -5,7 +5,7 @@ reader is forgiving: unset or unparsable falls back to the default and is
 logged rather than raised — a bad knob should not kill a crawl.
 
 Only the two knobs :class:`~collector.engine.crawl.Crawl` actually honours live
-here. A parser reading its own params reads its own dict; a helper in this
+here. A crawler reading its own params reads its own dict; a helper in this
 package would only promise a name the engine does not know.
 """
 
@@ -19,7 +19,7 @@ logger = logging.getLogger(__name__)
 def read_concurrency(params: dict[str, str], default: int) -> int:
     """Read ``concurrency`` (number of request workers) from the params.
 
-    Falls back to ``default`` (the parser's ClassVar) when unset or invalid; a
+    Falls back to ``default`` (the crawler's ClassVar) when unset or invalid; a
     non-positive value is treated as invalid.
     """
     raw = params.get('concurrency')
@@ -48,7 +48,7 @@ def worker_count(params: dict[str, str], default: int) -> int:
 def read_max_requests(params: dict[str, str], default: int | None) -> int | None:
     """Read ``max_requests`` from the params. ``None`` means no ceiling.
 
-    Falls back to ``default`` (the parser's ``Settings``) when unset or
+    Falls back to ``default`` (the crawler's ``Settings``) when unset or
     invalid; a non-positive value is treated as invalid.
     """
     raw = params.get('max_requests')

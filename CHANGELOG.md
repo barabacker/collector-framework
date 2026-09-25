@@ -9,7 +9,7 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 ### Added
 
 - `Response.headers` — the response headers, alongside `status` and `text`. A
-  parser reading a rate limit or a content type had to reach into `raw`, which
+  crawler reading a rate limit or a content type had to reach into `raw`, which
   is meant for what this wrapper does not cover.
 
 ### Changed
@@ -20,10 +20,10 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   sees both. Left out, the declared value stands, so a direct caller is
   unaffected.
 
-- `BaseParser` is now `Parser`. The `Base` prefix said nothing the `ABC` and
+- `BaseParser` is now `Crawler`. The `Base` prefix said nothing the `ABC` and
   the abstract `parse()` did not already enforce. Downstream code renames the
   import; nothing else about the class changed. An application that wants a
-  gentler move can alias it itself with `BaseParser = Parser`.
+  gentler move can alias it itself with `BaseParser = Crawler`.
 - `RequestHook` and `ResponseHook` are typed by the awaitable they return
   rather than declared `async def`. Declaring the call `async def` described an
   implementation — "this method is a coroutine function" — when all the client
@@ -40,12 +40,12 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   beside the hooks they describe, and are still exported from `collector.http`.
 - **Behaviour change:** `Settings.response_hooks` now run in the order they are
   declared. They ran back to front before — the LIFO of the container they were
-  registered with, never something `Settings` promised — so a parser declaring
+  registered with, never something `Settings` promised — so a crawler declaring
   two response hooks got them in the opposite order. Request hooks were already
   in declaration order; the two halves now agree. Logging still runs last on the
   way back, so it reports the response actually returned.
-- The package root exports what a *parser* author writes: `Parser`,
-  `ParserContext`, `Request`, `Response`, `Settings`, `RetryPolicy`,
+- The package root exports what a *crawler* author writes: `Crawler`,
+  `CrawlerContext`, `Request`, `Response`, `Settings`, `RetryPolicy`,
   `DEFAULT_RETRY_STATUSES`, `Crawl`, `Stats` and the four entry points —
   fourteen names instead of twenty-four. The transport moves to
   `collector.http`, which is what a *hook* author writes: `HttpClient`,
@@ -60,7 +60,7 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   keeps its crawl behind `if __name__ == '__main__'`, and the suite imports all
   of them so an API change breaks them here rather than in front of a reader.
 - The modules are laid out in three packages, by what someone reaching for them
-  is doing: `collector.spider` (`Parser`, `ParserContext`, `Request`,
+  is doing: `collector.crawler` (`Crawler`, `CrawlerContext`, `Request`,
   `Response`), `collector.engine` (`Crawl`, `Stats` and the four entry points)
   and `collector.http` (the transport). Each re-exports its own names.
   `collector.settings` stays a module beside them, because all three read it and
@@ -82,16 +82,16 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Removed
 
-- `on_item`, the callback on `Crawl`, `crawl()`, `run_parser()` and
+- `on_item`, the callback on `Crawl`, `crawl()`, `run_crawler()` and
   `open_crawl()`. An item now reaches its consumer two ways instead of three:
   `process_item()` pushes it and `stream()` pulls it. A synchronous caller that
-  wants the items keeps them on the parser and reads them back off
+  wants the items keeps them on the crawler and reads them back off
   `crawl.crawler` — which is what the README already recommends for an
   application's own counters — or calls `collect()`, which now drains
   `stream()` and still runs the class it was given, unsubclassed.
 - `read_max_pages()` and `read_flag()`. Neither was ever called by the
   framework. `read_max_pages` was the worse of the two: it promised a
-  `max_pages` convention that the engine does not honour, so a parser that
+  `max_pages` convention that the engine does not honour, so a crawler that
   trusted the README got a knob that quietly did nothing. `read_concurrency`
   and `read_max_requests` stay — the crawl reads them — but as
   `collector.engine.params`, not package-level API.
@@ -99,10 +99,10 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   in. Nothing in the framework ever called it and the README never mentioned
   it: a convenience for writing `parse()`, which is an application's own code.
   It is four lines of `re.sub` an application keeps where it uses it.
-- `ParserContext.job_name` and `ParserContext.extra`. Nothing read either one —
+- `CrawlerContext.job_name` and `CrawlerContext.extra`. Nothing read either one —
   not the framework, not a test, not the README — so they were public API with
   no behaviour behind them. Whatever an application needs to carry belongs on
-  its own parser subclass or in `sink`, and a general-purpose bag is not a
+  its own crawler subclass or in `sink`, and a general-purpose bag is not a
   replacement for them.
 
 ### Fixed
@@ -130,7 +130,7 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 - A hook-driven `retry()` now runs the request hooks again, so `Throttle`
   paces it like any other request. It skipped the request hooks before, which
   meant a response hook solving a challenge put a request on the wire outside
-  the `delay` a parser had declared — the site saw twice the rate it was
+  the `delay` a crawler had declared — the site saw twice the rate it was
   promised. The attempt budget is unaffected: a hook's retry still spends none.
 
 ## [0.0.1] — 2026-09-17

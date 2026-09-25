@@ -12,7 +12,7 @@ caused it.
 
 A retryable status is *not* a failure: 429 and the 5xx family are retried inside
 the HTTP client, and once the attempt budget is spent the response is handed to
-``parse()`` as it is. What to do about a 404 is the parser's decision, which is
+``parse()`` as it is. What to do about a 404 is the crawler's decision, which is
 why this one makes it explicitly.
 
     uv run python examples/errors.py
@@ -22,12 +22,12 @@ from __future__ import annotations
 
 from typing import Any
 
-from collector import Parser, Response, RetryPolicy, Settings, run_parser
+from collector import Crawler, Response, RetryPolicy, Settings, run_crawler
 
 BASE = 'https://mockhttp.org'
 
 
-class Strict(Parser):
+class Strict(Crawler):
     name = 'strict'
     start_urls = [
         f'{BASE}/get?page=1',
@@ -49,7 +49,7 @@ class Strict(Parser):
 
 def main() -> None:
     try:
-        crawl = run_parser(Strict)
+        crawl = run_crawler(Strict)
     except Exception as exc:  # noqa: BLE001 — showing what arrives, not handling it
         crawl = exc.crawl
         print(f'raised: {type(exc).__name__}: {exc}')

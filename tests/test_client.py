@@ -87,7 +87,7 @@ async def test_a_hook_driven_retry_runs_the_request_hooks_again():
 
     The hook-driven ``retry()`` is not a failed attempt and spends no attempt
     budget — but it does put a request on the wire, and a request that skips the
-    request hooks skips the pacing the parser declared with ``delay``.
+    request hooks skips the pacing the crawler declared with ``delay``.
     """
     session = _FakeSession([FakeResponse(text='challenge'), FakeResponse(text='content')])
     paced: list[str] = []

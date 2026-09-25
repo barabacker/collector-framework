@@ -1,4 +1,4 @@
-"""What runs a parser: the queue and workers, and the ways to start them.
+"""What runs a crawler: the queue and workers, and the ways to start them.
 
 ``Crawl`` owns one run — the queue, the ``concurrency`` workers, the counters
 and the failures — and ``runner`` assembles everything a run needs in the single
@@ -9,7 +9,7 @@ a job's free-form strings.
 from __future__ import annotations
 
 from collector.engine.crawl import Crawl, Stats
-from collector.engine.runner import collect, crawl, open_crawl, run_parser
+from collector.engine.runner import collect, crawl, open_crawl, run_crawler
 
 __all__ = [
     'Crawl',
@@ -17,5 +17,5 @@ __all__ = [
     'collect',
     'crawl',
     'open_crawl',
-    'run_parser',
+    'run_crawler',
 ]

@@ -1,6 +1,6 @@
-"""Settings — everything a parser declares about how it talks to a site.
+"""Settings — everything a crawler declares about how it talks to a site.
 
-One frozen dataclass instead of a handful of loose class attributes: a parser
+One frozen dataclass instead of a handful of loose class attributes: a crawler
 sets ``settings = Settings(...)``, and a subclass narrows its parent's with
 ``dataclasses.replace``. Frozen because the crawl reads it concurrently and a
 setting that changes mid-run is a bug, not a feature.
@@ -46,7 +46,7 @@ class RetryPolicy:
 
 @dataclass(frozen=True, slots=True)
 class Settings:
-    """How a parser's HTTP client is built and how hard it leans on a site."""
+    """How a crawler's HTTP client is built and how hard it leans on a site."""
 
     # ── transport ───────────────────────────────────────────────────────────
     #: curl_cffi browser fingerprint; None sends curl's own.
@@ -55,7 +55,7 @@ class Settings:
     proxy: str | None = None
     headers: Mapping[str, str] | None = None
     #: PEM with an extra CA/intermediate certificate, resolved relative to the
-    #: file the parser class is defined in.
+    #: file the crawler class is defined in.
     extra_ca_cert: str | None = None
     #: Disable TLS verification outright. Only for a certificate that is broken
     #: on the site's side and that no CA bundle can fix.
