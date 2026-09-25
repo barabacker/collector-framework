@@ -17,6 +17,10 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   passed to it rather than pacing on its own; `delay` was already a plain
   attribute, so nothing else needed to change to let something adjust it
   between requests.
+- `Crawler.on_error(request, exc)` — an optional hook run when a request
+  fails. The framework still collects it in `errors` and re-raises the first
+  one at the end regardless of whether this is overridden; a broken override
+  is logged and otherwise ignored, so it cannot take the worker down with it.
 - `Crawler.opened()` — an optional hook run once before the crawl starts, for
   async setup `__init__` cannot do (logging in, opening a connection pool). If
   it raises, the crawl never starts and `closed()` is not called — the same

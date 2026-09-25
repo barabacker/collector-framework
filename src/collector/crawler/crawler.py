@@ -126,6 +126,16 @@ class Crawler(ABC):
         whether or not an override calls ``super()``.
         """
 
+    async def on_error(self, request: Request, exc: Exception) -> None:  # noqa: B027 — optional hook
+        """Run when a request fails. A no-op here; override to observe it.
+
+        The framework still collects the failure in ``errors`` and re-raises
+        the first one at the end whether or not this is overridden — this is
+        for reacting (a metric, a note), not for changing what happens next.
+        A broken override is logged and otherwise ignored, so it cannot take
+        down the worker that called it.
+        """
+
     async def closed(self, stats: Stats) -> None:  # noqa: B027 — optional hook
         """Run once the crawl is over. A no-op here; override to release a resource.
 

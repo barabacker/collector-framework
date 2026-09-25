@@ -390,6 +390,49 @@ async def test_errors_are_logged_as_they_happen(ctx_factory, caplog):
     assert f'crawl.error GET {PAGE_1}' in caplog.text
 
 
+async def test_on_error_is_called_with_the_request_and_exception(ctx_factory):
+    seen: list[Any] = []
+
+    class _Tracking(_FailingBoth):
+        async def on_error(self, request: Any, exc: Exception) -> None:
+            seen.append((request, exc))
+
+    ctx, _ = ctx_factory(FakeHttp())
+    crawl = Crawl(_Tracking(ctx))
+
+    with pytest.raises(ValueError):
+        await crawl.run()
+
+    assert {req.url for req, _ in seen} == {PAGE_1, PAGE_2}
+    assert all(isinstance(exc, ValueError) for _, exc in seen)
+    # A no-op by default, but it did not replace the framework's own bookkeeping.
+    assert len(crawl.errors) == 2
+
+
+async def test_a_broken_on_error_does_not_kill_the_worker(ctx_factory):
+    """A hook failing must not be worse than the failure it was reacting to."""
+    calls = 0
+
+    class _Failing(_FailingBoth):
+        start_urls = [PAGE_1]
+
+        async def on_error(self, request: Any, exc: Exception) -> None:
+            nonlocal calls
+            calls += 1
+            raise RuntimeError('on_error is broken')
+
+    ctx, _ = ctx_factory(FakeHttp())
+    crawl = Crawl(_Failing(ctx))
+
+    # The original failure still ends the crawl — on_error breaking does not
+    # substitute its own error for it, or leave the crawl hanging.
+    with pytest.raises(ValueError, match='bad'):
+        await crawl.run()
+
+    assert calls == 1
+    assert len(crawl.errors) == 1
+
+
 # ── stream ──────────────────────────────────────────────────────────────────
 
 

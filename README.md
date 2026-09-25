@@ -56,6 +56,11 @@ browser impersonation via `curl_cffi` for sites that fingerprint TLS.
 - **`max_requests`** — a safety valve. Without a ceiling, a bug in pagination
   crawls forever with nothing to stop it; on reaching it the crawl ends
   cleanly with `stats.reason == 'max_requests'`.
+- **`on_error(request, exc)`** — an optional hook run when a request fails.
+  The framework still collects it and re-raises the first at the end either
+  way; this is for reacting (a metric, a note), not for changing what
+  happens next. A broken override is logged, not left to take the worker
+  down with it.
 - **`Settings`** — one frozen dataclass per crawler holding proxy, timeout,
   impersonation, headers, TLS quirks, pacing, retry policy and hooks. A subclass
   narrows its parent's with `dataclasses.replace`. The HTTP client is assembled

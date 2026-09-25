@@ -236,6 +236,10 @@ class Crawl:
                 logger.warning('crawl.error %s %s %r', req.method, req.url, exc)
                 self.stats.errors += 1
                 self.errors.append((req, exc))
+                try:
+                    await self.crawler.on_error(req, exc)
+                except Exception:  # noqa: BLE001 — a broken hook must not also kill the worker
+                    logger.exception('crawl.on_error_failed %s %s', req.method, req.url)
             finally:
                 queue.task_done()
 
