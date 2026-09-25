@@ -16,7 +16,7 @@ from pathlib import Path
 
 import pytest
 
-from collector import Parser
+from collector import Crawler
 
 EXAMPLES = Path(__file__).parent.parent / 'examples'
 NAMES = sorted(path.stem for path in EXAMPLES.glob('*.py'))
@@ -28,16 +28,16 @@ def test_there_are_examples_to_check():
 
 
 @pytest.mark.parametrize('name', NAMES)
-def test_an_example_imports_and_declares_a_parser(name):
+def test_an_example_imports_and_declares_a_crawler(name):
     module = importlib.import_module(f'examples.{name}')
 
-    parsers = [
+    crawlers = [
         value
         for value in vars(module).values()
-        if isinstance(value, type) and issubclass(value, Parser) and value is not Parser
+        if isinstance(value, type) and issubclass(value, Crawler) and value is not Crawler
     ]
-    assert parsers, f'{name} defines no Parser'
-    assert all(getattr(parser, 'name', None) for parser in parsers)
+    assert crawlers, f'{name} defines no Crawler'
+    assert all(getattr(crawler, 'name', None) for crawler in crawlers)
     assert callable(module.main)
 
 

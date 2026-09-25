@@ -6,7 +6,7 @@ from dataclasses import FrozenInstanceError, replace
 
 import pytest
 
-from collector import DEFAULT_RETRY_STATUSES, Parser, RetryPolicy, Settings
+from collector import DEFAULT_RETRY_STATUSES, Crawler, RetryPolicy, Settings
 
 
 def test_defaults_are_conservative():
@@ -29,8 +29,8 @@ def test_replace_narrows_without_touching_the_original():
     assert base.timeout == 10.0
 
 
-def test_base_parser_has_default_settings():
-    assert Parser.settings == Settings()
+def test_base_crawler_has_default_settings():
+    assert Crawler.settings == Settings()
 
 
 def test_retry_statuses_are_the_transient_ones():

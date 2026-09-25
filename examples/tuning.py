@@ -1,13 +1,13 @@
-"""How hard to lean on a site, and how a job overrides it without touching the parser.
+"""How hard to lean on a site, and how a job overrides it without touching the crawler.
 
-``Settings`` is one frozen dataclass per parser holding everything about how it
+``Settings`` is one frozen dataclass per crawler holding everything about how it
 talks to a site, so a caller never carries the site's quirks. A subclass narrows
 its parent's with ``dataclasses.replace`` — the fields it does not name keep the
 parent's values.
 
 Two of those knobs can also be overridden per run, through ``params``: strings
 from a CLI flag or a job payload, where a bad value falls back to what the
-parser declared rather than killing the crawl.
+crawler declared rather than killing the crawl.
 
 Worth knowing about pacing: ``delay`` is a ceiling of ``1/delay`` requests per
 second *for the whole crawl*, not per worker — the ``Throttle`` holds its gap
@@ -22,12 +22,12 @@ from __future__ import annotations
 from dataclasses import replace
 from typing import Any
 
-from collector import Parser, Response, RetryPolicy, Settings, run_parser
+from collector import Crawler, Response, RetryPolicy, Settings, run_crawler
 
 BASE = 'https://mockhttp.org'
 
 
-class Fan(Parser):
+class Fan(Crawler):
     """One index page linking several others: work a crawl can spread out."""
 
     name = 'fan'
@@ -59,9 +59,9 @@ class Polite(Fan):
     settings = replace(Fan.settings, concurrency=1, delay=0.25)
 
 
-def report(label: str, parser_cls: type[Parser], **kwargs: Any) -> None:
-    crawler = run_parser(parser_cls, **kwargs)
-    stats = crawler.stats
+def report(label: str, crawler_cls: type[Crawler], **kwargs: Any) -> None:
+    crawl = run_crawler(crawler_cls, **kwargs)
+    stats = crawl.stats
     print(
         f'{label:<28} {stats.requests} requests, {stats.items} items, '
         f'{stats.elapsed:.1f}s, reason={stats.reason!r}'
@@ -72,7 +72,7 @@ def main() -> None:
     report('concurrency=4, delay=0.25', Fan)
     # Same wall clock: the delay was the ceiling all along, not the worker count.
     report('concurrency=1, delay=0.25', Polite)
-    # params win over what the parser declared — and a junk value falls back to
+    # params win over what the crawler declared — and a junk value falls back to
     # it instead of raising.
     report("params concurrency='2'", Fan, params={'concurrency': '2', 'max_requests': '3'})
     report("params concurrency='oops'", Fan, params={'concurrency': 'oops', 'max_requests': '3'})

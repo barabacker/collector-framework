@@ -1,7 +1,7 @@
-"""Crawler — the engine that runs a parser: queue, workers, limits, stats.
+"""Crawl — the engine that runs a crawler: queue, workers, limits, stats.
 
-Split out of ``Parser`` so that a parser stays declarative. A parser says
-*what* to fetch and what to do with an item; the crawler owns everything about
+Split out of ``Crawler`` so that a crawler stays declarative. A crawler says
+*what* to fetch and what to do with an item; the crawl owns everything about
 one run — the queue, the workers, the counters and the failures — and is what
 the caller gets back when the run is over.
 """
@@ -16,12 +16,12 @@ from collections.abc import AsyncIterator
 from dataclasses import dataclass, field
 from typing import TYPE_CHECKING, Any
 
+from collector.crawler.request import Request
+from collector.crawler.response import Response
 from collector.engine.params import read_max_requests, worker_count
-from collector.spider.request import Request
-from collector.spider.response import Response
 
 if TYPE_CHECKING:
-    from collector.spider.parser import Parser
+    from collector.crawler.crawler import Crawler
 
 logger = logging.getLogger(__name__)
 
@@ -34,7 +34,7 @@ class Stats:
     """What one crawl did. Times are ``time.monotonic()``, so only gaps mean anything."""
 
     #: Requests taken off the queue and sent. Retries happen inside the HTTP
-    #: client and are invisible here, so this counts *requests the parser
+    #: client and are invisible here, so this counts *requests the crawler
     #: asked for*, not round trips curl made.
     requests: int = 0
     errors: int = 0
@@ -54,16 +54,16 @@ class Stats:
 
 
 @dataclass(slots=True)
-class Crawler:
-    """Runs one parser to completion and holds everything that run produced.
+class Crawl:
+    """Runs one crawler to completion and holds everything that run produced.
 
-    An item reaches its consumer two ways, and only two: the parser's own
+    An item reaches its consumer two ways, and only two: the crawler's own
     ``process_item()`` pushes it, and ``stream()`` pulls it. A caller who wants
-    the items without writing an async loop keeps them on the parser and reads
-    them back off ``crawler.parser`` when the run is over.
+    the items without writing an async loop keeps them on the crawler and reads
+    them back off ``crawl.crawler`` when the run is over.
     """
 
-    parser: Parser
+    crawler: Crawler
     stats: Stats = field(default_factory=Stats)
     #: Every request that failed, paired with its exception. ``run()`` re-raises
     #: the first, but a crawl that survived twenty failures should show twenty.
@@ -81,7 +81,7 @@ class Crawler:
         Breaking out of ``async for`` does not close the generator there and
         then — Python finalises it whenever it gets around to it, and until it
         does, the workers and the HTTP session they hold stay alive.
-        ``open_crawler()`` calls this on the way out so that cannot happen;
+        ``open_crawl()`` calls this on the way out so that cannot happen;
         a direct ``stream()`` user wants ``contextlib.aclosing()``.
         """
         task = self._run_task
@@ -102,7 +102,7 @@ class Crawler:
 
         The crawl's outcome surfaces after the last item: a clean finish ends
         the iteration, and a failure raises the first error, as ``run()`` does.
-        Use it through ``open_crawler()``, which owns the HTTP session for as
+        Use it through ``open_crawl()``, which owns the HTTP session for as
         long as the iteration needs it.
         """
         out: asyncio.Queue[Any] = asyncio.Queue(maxsize=self._buffer_size())
@@ -135,7 +135,7 @@ class Crawler:
         finally:
             # Reached on a consumer's ``break`` too — but only once Python gets
             # around to finalising this generator, which is why aclose() exists
-            # and why open_crawler() does not rely on this alone.
+            # and why open_crawl() does not rely on this alone.
             self._out = None
             if self._run_task is run_task:
                 self._run_task = None
@@ -146,7 +146,7 @@ class Crawler:
 
     def _buffer_size(self) -> int:
         """One parked item per worker: enough to keep them moving, bounded enough to push back."""
-        return worker_count(self.parser.ctx.params, self.parser.settings.concurrency)
+        return worker_count(self.crawler.ctx.params, self.crawler.settings.concurrency)
 
     async def run(self) -> Stats:
         """Run the crawl with ``concurrency`` workers; return its ``Stats``.
@@ -155,16 +155,16 @@ class Crawler:
         workers have finished, so one bad page neither kills a worker nor passes
         silently; see ``errors`` for the rest.
         """
-        parser = self.parser
-        params = parser.ctx.params
-        limit = read_max_requests(params, parser.settings.max_requests)
+        crawler = self.crawler
+        params = crawler.ctx.params
+        limit = read_max_requests(params, crawler.settings.max_requests)
 
         self.stats.started_at = time.monotonic()
         queue: asyncio.Queue[Request] = asyncio.Queue()
-        async for req in parser.start_requests():
+        async for req in crawler.start_requests():
             queue.put_nowait(req)
 
-        n_workers = worker_count(params, parser.settings.concurrency)
+        n_workers = worker_count(params, crawler.settings.concurrency)
         workers = [asyncio.create_task(self._worker(queue, limit)) for _ in range(n_workers)]
         try:
             await queue.join()
@@ -214,10 +214,10 @@ class Crawler:
                 queue.task_done()
 
     async def _handle(self, req: Request, queue: asyncio.Queue[Request]) -> None:
-        parser = self.parser
-        raw = await parser.http.request(req.method, req.url, **req.http_kwargs())
+        crawler = self.crawler
+        raw = await crawler.http.request(req.method, req.url, **req.http_kwargs())
         response = Response(raw, req)
-        callback = req.callback or parser.parse
+        callback = req.callback or crawler.parse
         async for result in callback(response):
             if isinstance(result, Request):
                 queue.put_nowait(result)
@@ -225,7 +225,7 @@ class Crawler:
                 # Counted here rather than in process_item: an override that
                 # forgets super() must not silently corrupt the crawl's count.
                 self.stats.items += 1
-                await parser.process_item(result)
+                await crawler.process_item(result)
                 if self._out is not None:
                     # Bounded: this is where a slow stream consumer stops us.
                     await self._out.put(result)

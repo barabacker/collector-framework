@@ -16,12 +16,12 @@ from __future__ import annotations
 import sys
 from typing import Any
 
-from collector import Parser, Response, Settings, collect
+from collector import Crawler, Response, Settings, collect
 
 API = 'https://quotes.toscrape.com/api/quotes'
 
 
-class QuotesApi(Parser):
+class QuotesApi(Crawler):
     name = 'quotes-api'
     settings = Settings(delay=0.3, max_requests=5)
 

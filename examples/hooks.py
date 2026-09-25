@@ -1,4 +1,4 @@
-"""Hooks: pace and log every round trip, and solve a challenge without the parser knowing.
+"""Hooks: pace and log every round trip, and solve a challenge without the crawler knowing.
 
 Two ordered tuples on the client. Request hooks run before each round trip and
 may mutate what is about to be sent; response hooks run after it and may return
@@ -7,7 +7,7 @@ again.
 
 That ``retry()`` is the interesting half. It is how an anti-bot challenge, a
 login or an expired token gets dealt with in one place instead of in every
-parser: the hook fixes the session and asks for the request again. It spends no
+crawler: the hook fixes the session and asks for the request again. It spends no
 part of the ``RetryPolicy`` budget — solving a challenge is not a failed attempt
 — but it *is* another request to the site, so it queues behind ``Throttle`` like
 any other.
@@ -23,7 +23,7 @@ from __future__ import annotations
 import time
 from typing import Any
 
-from collector import Parser, Response, Settings, collect
+from collector import Crawler, Response, Settings, collect
 
 BASE = 'https://mockhttp.org'
 TOKEN = 'a-token-fetched-from-somewhere'
@@ -49,7 +49,7 @@ class Stopwatch:
 
 
 async def send_referer(method: str, url: str, kwargs: dict[str, Any]) -> None:
-    """Request hook: add a header to every request, without touching any parser."""
+    """Request hook: add a header to every request, without touching any crawler."""
     headers = kwargs.setdefault('headers', {})
     headers.setdefault('Referer', BASE)
 
@@ -71,7 +71,7 @@ async def authenticate(response: Any, *, session: Any, retry: Any) -> Any:
 stopwatch = Stopwatch()
 
 
-class Protected(Parser):
+class Protected(Crawler):
     name = 'protected'
     start_urls = [f'{BASE}/bearer', f'{BASE}/bearer']
     settings = Settings(

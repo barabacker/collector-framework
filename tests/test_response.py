@@ -62,7 +62,7 @@ def test_follow_builds_a_request_with_an_absolute_url():
 
     assert req.url == 'https://example.test/next'
     assert req.metadata == {'page': 2}
-    # No callback means parse(), the same default the parser's own request gets.
+    # No callback means parse(), the same default the crawler's own request gets.
     assert req.callback is None
 
 

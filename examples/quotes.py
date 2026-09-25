@@ -13,10 +13,10 @@ from __future__ import annotations
 import sys
 from typing import Any
 
-from collector import Parser, Response, Settings, collect
+from collector import Crawler, Response, Settings, collect
 
 
-class Quotes(Parser):
+class Quotes(Crawler):
     name = 'quotes'
     start_urls = ['https://quotes.toscrape.com/']
     settings = Settings(delay=0.5)

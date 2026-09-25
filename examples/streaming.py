@@ -5,7 +5,7 @@ other direction: the consumer's loop drives, items arrive over a channel bounded
 by ``concurrency`` — so a slow consumer applies backpressure instead of letting
 the crawl pile up in memory — and breaking out of the loop stops the crawl.
 
-``open_crawler()`` is what makes the ``break`` safe: the HTTP session has to
+``open_crawl()`` is what makes the ``break`` safe: the HTTP session has to
 outlive the iteration, and a consumer that walks away has to have the workers
 stopped for it. Without it, ``break`` does not finalise the generator there and
 then, and the crawl keeps going until Python gets round to it.
@@ -19,10 +19,10 @@ import asyncio
 import sys
 from typing import Any
 
-from collector import Parser, Response, Settings, open_crawler
+from collector import Crawler, Response, Settings, open_crawl
 
 
-class Quotes(Parser):
+class Quotes(Crawler):
     name = 'quotes-stream'
     start_urls = ['https://quotes.toscrape.com/']
     settings = Settings(delay=0.3)
@@ -44,9 +44,9 @@ async def main() -> None:
 
     wanted = 12
 
-    async with open_crawler(Quotes) as crawler:
+    async with open_crawl(Quotes) as crawl:
         seen: list[Any] = []
-        async for quote in crawler.stream():
+        async for quote in crawl.stream():
             seen.append(quote)
             print(f'{len(seen):>3}. {quote["author"]}')
             if len(seen) == wanted:
@@ -58,8 +58,8 @@ async def main() -> None:
     # stats.items reads a little above `wanted`: the page being parsed when the
     # break happened had already emitted the rest of its quotes into the
     # channel. Backpressure bounds that overshoot to a page, not to nothing.
-    print(f'\n{crawler.stats}')
-    print(f'asked for {wanted}, crawled {crawler.stats.requests} pages')
+    print(f'\n{crawl.stats}')
+    print(f'asked for {wanted}, crawled {crawl.stats.requests} pages')
 
 
 if __name__ == '__main__':

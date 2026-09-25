@@ -37,21 +37,21 @@ def test_the_changelog_leads_with_the_current_version():
     assert released and released[0] == _declared()
 
 
-def test_the_root_exports_what_a_parser_author_writes():
+def test_the_root_exports_what_a_crawler_author_writes():
     """The transport lives in collector.http; growing this list back is a decision."""
     assert set(collector.__all__) == {
         '__version__',
-        'Parser',
-        'ParserContext',
+        'Crawler',
+        'CrawlerContext',
         'Request',
         'Response',
         'Settings',
         'RetryPolicy',
         'DEFAULT_RETRY_STATUSES',
-        'Crawler',
+        'Crawl',
         'Stats',
-        'open_crawler',
+        'open_crawl',
         'crawl',
-        'run_parser',
+        'run_crawler',
         'collect',
     }

@@ -3,7 +3,7 @@
 Every other test in this suite swaps ``HttpClient`` for ``FakeHttp``, so
 ``curl_cffi`` itself, the retry loop's sleeps, the ``Throttle`` lock and a
 session outliving a cancelled ``stream()`` were never exercised. These drive the
-public API (``run_parser`` / ``collect`` / ``open_crawler``) against a real HTTP
+public API (``run_crawler`` / ``collect`` / ``open_crawl``) against a real HTTP
 service and check what actually went out.
 
 Marked ``network`` and excluded from the default run: ``uv run pytest -q`` still
@@ -46,15 +46,15 @@ import pytest
 from curl_cffi.requests.exceptions import RequestException
 
 from collector import (
+    Crawl,
     Crawler,
-    Parser,
-    ParserContext,
+    CrawlerContext,
     Response,
     RetryPolicy,
     Settings,
     collect,
-    open_crawler,
-    run_parser,
+    open_crawl,
+    run_crawler,
 )
 from collector.http import build_http_client
 
@@ -104,15 +104,15 @@ def settings(**kwargs: Any) -> Settings:
     return Settings(**kwargs)
 
 
-class Recording(Parser):
+class Recording(Crawler):
     """Keeps what it emitted, for a test that wants the items and the stats both.
 
-    The sanctioned route for a synchronous caller: put the state on the parser,
-    read it back off ``crawler.parser`` once the run is over. The crawler hands
+    The sanctioned route for a synchronous caller: put the state on the crawler,
+    read it back off ``crawl.crawler`` once the run is over. The crawl hands
     items to nobody but ``stream()``.
     """
 
-    def __init__(self, ctx: ParserContext) -> None:
+    def __init__(self, ctx: CrawlerContext) -> None:
         super().__init__(ctx)
         self.items: list[Any] = []
 
@@ -145,7 +145,7 @@ def test_a_crawl_talks_to_the_real_service() -> None:
     a real TLS handshake, with a CDN on the other side of it.
     """
 
-    class Get(Parser):
+    class Get(Crawler):
         name = 'mockhttp-get'
         start_urls = [f'{BASE}/get?page=2']
         settings = settings()
@@ -170,7 +170,7 @@ def test_a_crawl_talks_to_the_real_service() -> None:
 def test_a_request_carries_its_own_transport_fields_over_the_wire() -> None:
     """``Request.http_kwargs()`` against real curl, not against a fake's ``**kwargs``."""
 
-    class Poster(Parser):
+    class Poster(Crawler):
         name = 'mockhttp-anything'
         settings = settings()
 
@@ -204,13 +204,13 @@ def test_redirects_are_followed_below_the_framework() -> None:
         async def parse(self, response: Response) -> Any:
             yield {'status': response.status, 'final': str(response.raw.url)}
 
-    crawler = run_parser(Redirected)
-    item = crawler.parser.items[0]
+    crawl = run_crawler(Redirected)
+    item = crawl.crawler.items[0]
 
     assert item['status'] == 200
     assert item['final'].endswith('/get')
     # Three hops on the wire, one request through this framework: curl's business.
-    assert crawler.stats.requests == 1
+    assert crawl.stats.requests == 1
     assert len(trips) == 1
 
 
@@ -219,7 +219,7 @@ def test_redirects_are_followed_below_the_framework() -> None:
 
 @pytest.mark.parametrize('status', [429, 503])
 def test_a_retryable_status_spends_the_whole_attempt_budget(status: int) -> None:
-    """``/status/:code`` is stateless, so every attempt fails and the parser sees it.
+    """``/status/:code`` is stateless, so every attempt fails and the crawler sees it.
 
     A retryable status is not an error: once the budget is spent the response is
     handed over, and the crawl finishes clean.
@@ -234,19 +234,19 @@ def test_a_retryable_status_spends_the_whole_attempt_budget(status: int) -> None
         async def parse(self, response: Response) -> Any:
             yield {'status': response.status}
 
-    crawler = run_parser(Failing)
+    crawl = run_crawler(Failing)
 
-    assert crawler.parser.items == [{'status': status}]
+    assert crawl.crawler.items == [{'status': status}]
     assert len(trips) == 3  # three round trips …
-    assert crawler.stats.requests == 1  # … for one request the parser asked for
-    assert crawler.errors == []
+    assert crawl.stats.requests == 1  # … for one request the crawler asked for
+    assert crawl.errors == []
 
 
 def test_a_transport_error_spends_the_same_budget_and_then_fails_the_crawl() -> None:
     """``/delay/:n`` held past our timeout is the other failure mode the budget covers."""
     trips = RoundTrips()
 
-    class Slow(Parser):
+    class Slow(Crawler):
         name = 'mockhttp-timeout'
         start_urls = [f'{BASE}/delay/5']
         settings = settings(timeout=1.0, retry=fast_retry(attempts=2), request_hooks=(trips,))
@@ -255,13 +255,13 @@ def test_a_transport_error_spends_the_same_budget_and_then_fails_the_crawl() -> 
             yield {'status': response.status}
 
     with pytest.raises(RequestException) as raised:
-        run_parser(Slow)
+        run_crawler(Slow)
 
     assert len(trips) == 2
-    # The crawler rides out on the exception, with the failure still attached.
-    crawler = raised.value.crawler
-    assert crawler.stats.errors == 1
-    assert [request.url for request, _ in crawler.errors] == list(Slow.start_urls)
+    # The crawl rides out on the exception, with the failure still attached.
+    crawl = raised.value.crawl
+    assert crawl.stats.errors == 1
+    assert [request.url for request, _ in crawl.errors] == list(Slow.start_urls)
 
 
 def test_stats_requests_counts_queued_requests_not_round_trips() -> None:
@@ -276,13 +276,13 @@ def test_stats_requests_counts_queued_requests_not_round_trips() -> None:
         async def parse(self, response: Response) -> Any:
             yield {'status': response.status}
 
-    crawler = run_parser(TwoFailing)
+    crawl = run_crawler(TwoFailing)
 
-    assert sorted(item['status'] for item in crawler.parser.items) == [502, 503]
+    assert sorted(item['status'] for item in crawl.crawler.items) == [502, 503]
     assert len(trips) == 4
-    assert crawler.stats.requests == 2
-    assert crawler.stats.items == 2
-    assert crawler.stats.reason == 'done'
+    assert crawl.stats.requests == 2
+    assert crawl.stats.items == 2
+    assert crawl.stats.reason == 'done'
 
 
 def test_a_hook_driven_retry_is_paced_but_spends_no_attempt() -> None:
@@ -311,12 +311,12 @@ def test_a_hook_driven_retry_is_paced_but_spends_no_attempt() -> None:
         async def parse(self, response: Response) -> Any:
             yield {'status': response.status}
 
-    crawler = run_parser(Challenged)
+    crawl = run_crawler(Challenged)
 
-    assert crawler.parser.items == [{'status': 200}]
+    assert crawl.crawler.items == [{'status': 200}]
     assert len(trips) == 2
     assert trips.gaps()[0] >= delay * 0.9
-    assert crawler.stats.requests == 1
+    assert crawl.stats.requests == 1
 
 
 # ── Retry-After: real header, real sleep, borrowed status ───────────────────
@@ -338,7 +338,7 @@ def test_retry_after_in_seconds_wins_over_the_backoff() -> None:
     """The policy would wait 5s; the server's header asks for 1."""
     trips = RoundTrips()
 
-    class Limited(Parser):
+    class Limited(Crawler):
         name = 'mockhttp-ra-seconds'
         start_urls = [f'{BASE}/response-headers?Retry-After=1']
         settings = settings(
@@ -360,7 +360,7 @@ def test_retry_after_as_an_http_date_wins_over_the_backoff() -> None:
     trips = RoundTrips()
     when = quote(email.utils.formatdate(time.time() + 2, usegmt=True))
 
-    class Limited(Parser):
+    class Limited(Crawler):
         name = 'mockhttp-ra-date'
         start_urls = [f'{BASE}/response-headers?Retry-After={when}']
         settings = settings(
@@ -382,7 +382,7 @@ def test_retry_after_as_an_http_date_wins_over_the_backoff() -> None:
 def test_a_retry_after_longer_than_we_will_wait_ends_the_retrying() -> None:
     trips = RoundTrips()
 
-    class Limited(Parser):
+    class Limited(Crawler):
         name = 'mockhttp-ra-too-long'
         start_urls = [f'{BASE}/response-headers?Retry-After=120']
         settings = settings(
@@ -415,7 +415,7 @@ def test_throttle_paces_the_whole_crawl_not_each_worker() -> None:
     trips = RoundTrips()
     delay = 0.4
 
-    class Fan(Parser):
+    class Fan(Crawler):
         name = 'mockhttp-fan'
         start_urls = [f'{BASE}/links/5/0']
         settings = settings(concurrency=4, delay=delay, request_hooks=(trips,))
@@ -427,13 +427,13 @@ def test_throttle_paces_the_whole_crawl_not_each_worker() -> None:
         async def parse_leaf(self, response: Response) -> Any:
             yield {'url': response.request.url}
 
-    crawler = run_parser(Fan)
+    crawl = run_crawler(Fan)
 
-    assert crawler.stats.requests == 5  # the index page plus four links
+    assert crawl.stats.requests == 5  # the index page plus four links
     assert len(trips) == 5
     assert min(trips.gaps()) >= delay * 0.9
     # Four workers bought nothing: the crawl still takes four gaps.
-    assert crawler.stats.elapsed >= 4 * delay
+    assert crawl.stats.elapsed >= 4 * delay
 
 
 def test_max_requests_stops_a_crawl_that_would_never_end() -> None:
@@ -444,10 +444,10 @@ def test_max_requests_stops_a_crawl_that_would_never_end() -> None:
         start_urls = [f'{BASE}/links/5/0']
         settings = settings(max_requests=6, request_hooks=(trips,))
 
-    crawler = run_parser(Endless)
+    crawl = run_crawler(Endless)
 
-    assert crawler.stats.requests == 6
-    assert crawler.stats.reason == 'max_requests'
+    assert crawl.stats.requests == 6
+    assert crawl.stats.reason == 'max_requests'
     # The valve closes before the socket, not after.
     assert len(trips) == 6
 
@@ -455,15 +455,15 @@ def test_max_requests_stops_a_crawl_that_would_never_end() -> None:
 # ── stream() and walking away from it ───────────────────────────────────────
 
 
-async def test_break_under_open_crawler_stops_the_crawl_and_the_session() -> None:
+async def test_break_under_open_crawl_stops_the_crawl_and_the_session() -> None:
     trips = RoundTrips()
 
     class Endless(Linked):
         start_urls = [f'{BASE}/links/8/0']
         settings = settings(delay=0.4, request_hooks=(trips,))
 
-    async with open_crawler(Endless) as crawler:
-        async for _item in crawler.stream():
+    async with open_crawl(Endless) as crawl:
+        async for _item in crawl.stream():
             break
 
     settled = len(trips)
@@ -476,7 +476,7 @@ async def test_break_without_closing_the_generator_leaves_the_crawl_running() ->
 
     Held by a name here rather than left to the garbage collector, so the test
     measures the framework and not CPython's finalisation timing. Until
-    ``aclose()`` — or ``open_crawler()``, or ``contextlib.aclosing()`` — the
+    ``aclose()`` — or ``open_crawl()``, or ``contextlib.aclosing()`` — the
     workers keep fetching and the HTTP session has to stay open under them.
     """
     trips = RoundTrips()
@@ -487,8 +487,8 @@ async def test_break_without_closing_the_generator_leaves_the_crawl_running() ->
 
     http = build_http_client(Endless)
     async with http:
-        crawler = Crawler(Endless(ParserContext(http=http)))
-        stream = crawler.stream()
+        crawl = Crawl(Endless(CrawlerContext(http=http)))
+        stream = crawl.stream()
         async for _item in stream:
             break
 
@@ -496,7 +496,7 @@ async def test_break_without_closing_the_generator_leaves_the_crawl_running() ->
         await asyncio.sleep(1.5)
         assert len(trips) > after_break  # still crawling, session still alive
 
-        await crawler.aclose()
+        await crawl.aclose()
         settled = len(trips)
         await asyncio.sleep(1.0)
         assert len(trips) == settled

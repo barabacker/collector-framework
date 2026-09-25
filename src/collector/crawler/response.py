@@ -8,7 +8,7 @@ from urllib.parse import urljoin
 
 from parsel import Selector
 
-from collector.spider.request import Request
+from collector.crawler.request import Request
 
 
 class Response:
@@ -36,7 +36,7 @@ class Response:
     def headers(self) -> Any:
         """The response headers, as the client returned them (lookup is case-insensitive).
 
-        Promoted alongside ``status`` and ``text`` because a parser reads them
+        Promoted alongside ``status`` and ``text`` because a crawler reads them
         for the same reasons — a rate limit, a content type, a pagination
         header — and ``raw`` is meant for what this wrapper does *not* cover.
         """
@@ -76,8 +76,8 @@ class Response:
     ) -> Request:
         """Build a ``Request`` for a link on this page, resolving it first.
 
-        ``callback`` left as None means the parser's ``parse()``, the same
-        default a request built by the parser itself gets.
+        ``callback`` left as None means the crawler's ``parse()``, the same
+        default a request built by the crawler itself gets.
         """
         return Request(
             url=self.urljoin(href),

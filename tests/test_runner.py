@@ -1,4 +1,4 @@
-"""run_parser / crawl: build the client, run the crawl, hand back the parser."""
+"""run_crawler / crawl: build the client, run the crawl, hand back the crawler."""
 
 from __future__ import annotations
 
@@ -8,12 +8,12 @@ from typing import Any
 import pytest
 from tests.conftest import FakeHttp
 
-from collector import Parser, collect, crawl, open_crawler, run_parser
+from collector import Crawler, collect, crawl, open_crawl, run_crawler
 
 URL = 'https://example.test/'
 
 
-class _Counting(Parser):
+class _Counting(Crawler):
     name = 'counting'
     start_urls = [URL]
 
@@ -43,30 +43,30 @@ def _patch_client(monkeypatch) -> FakeHttp:
     type(http).__aenter__ = _aenter
     type(http).__aexit__ = _aexit
     monkeypatch.setattr(
-        'collector.engine.runner.build_http_client', lambda parser_cls, **kwargs: http
+        'collector.engine.runner.build_http_client', lambda crawler_cls, **kwargs: http
     )
     return http
 
 
-def test_run_parser_returns_the_crawler(monkeypatch):
+def test_run_crawler_returns_the_crawl(monkeypatch):
     _patch_client(monkeypatch)
     sink: list[Any] = []
 
-    crawler = run_parser(_Counting, sink=sink)
+    crawl = run_crawler(_Counting, sink=sink)
 
-    assert crawler.stats.items == 1
-    # The parser instance comes back on the crawler, for an app's own counters.
-    assert crawler.parser.saved == [{'url': URL}]
+    assert crawl.stats.items == 1
+    # The crawler instance comes back on the crawl, for an app's own counters.
+    assert crawl.crawler.saved == [{'url': URL}]
     assert sink == [{'url': URL}]
 
 
-def test_run_parser_passes_params_through(monkeypatch):
+def test_run_crawler_passes_params_through(monkeypatch):
     _patch_client(monkeypatch)
-    crawler = run_parser(_Counting, params={'max_pages': '2'}, sink=[])
-    assert crawler.parser.ctx.params == {'max_pages': '2'}
+    crawl = run_crawler(_Counting, params={'max_pages': '2'}, sink=[])
+    assert crawl.crawler.ctx.params == {'max_pages': '2'}
 
 
-def test_run_parser_logs_through_the_default_logger(monkeypatch, caplog):
+def test_run_crawler_logs_through_the_default_logger(monkeypatch, caplog):
     _patch_client(monkeypatch)
 
     class _Logging(_Counting):
@@ -77,21 +77,21 @@ def test_run_parser_logs_through_the_default_logger(monkeypatch, caplog):
             yield {'url': response.request.url}
 
     with caplog.at_level('INFO', logger='collector.engine.runner'):
-        run_parser(_Logging, sink=[])
+        run_crawler(_Logging, sink=[])
 
     assert '[logging] hello' in caplog.text
 
 
 async def test_crawl_is_the_async_entry_point(monkeypatch):
     _patch_client(monkeypatch)
-    crawler = await crawl(_Counting, sink=[])
-    assert crawler.stats.items == 1
+    run = await crawl(_Counting, sink=[])
+    assert run.stats.items == 1
 
 
 def test_collect_returns_the_items(monkeypatch):
     _patch_client(monkeypatch)
 
-    class _Plain(Parser):
+    class _Plain(Crawler):
         name = 'plain'
         start_urls = [URL]
 
@@ -102,12 +102,12 @@ def test_collect_returns_the_items(monkeypatch):
     assert collect(_Plain) == [{'url': URL}, {'url': URL + '#2'}]
 
 
-def test_collect_keeps_the_parsers_own_process_item(monkeypatch):
-    """collect() drains stream(), so the parser's own hook still runs."""
+def test_collect_keeps_the_crawlers_own_process_item(monkeypatch):
+    """collect() drains stream(), so the crawler's own hook still runs."""
     _patch_client(monkeypatch)
     tagged: list[Any] = []
 
-    class _Tagging(Parser):
+    class _Tagging(Crawler):
         name = 'tagging'
         start_urls = [URL]
 
@@ -122,12 +122,12 @@ def test_collect_keeps_the_parsers_own_process_item(monkeypatch):
     assert tagged == [{'url': URL}]
 
 
-def test_collect_does_not_substitute_the_parser_class(monkeypatch):
+def test_collect_does_not_substitute_the_crawler_class(monkeypatch):
     """collect() used to run a dynamic subclass; the class it is given now runs as is."""
     _patch_client(monkeypatch)
     ran: list[type] = []
 
-    class _Plain(Parser):
+    class _Plain(Crawler):
         name = 'plain'
         start_urls = [URL]
 
@@ -139,7 +139,7 @@ def test_collect_does_not_substitute_the_parser_class(monkeypatch):
     assert ran == [_Plain]
 
 
-class _AlwaysFails(Parser):
+class _AlwaysFails(Crawler):
     """Three start URLs, every one of them blowing up in parse()."""
 
     name = 'always_fails'
@@ -150,26 +150,26 @@ class _AlwaysFails(Parser):
         yield  # pragma: no cover — makes parse() a generator
 
 
-def test_a_failed_crawl_carries_its_crawler_out_on_the_exception(monkeypatch):
+def test_a_failed_crawl_carries_its_crawl_out_on_the_exception(monkeypatch):
     """run() re-raises one error; the other two must not vanish with the frame."""
     _patch_client(monkeypatch)
 
     with pytest.raises(ValueError) as excinfo:
-        run_parser(_AlwaysFails)
+        run_crawler(_AlwaysFails)
 
-    crawler = excinfo.value.crawler
-    assert len(crawler.errors) == 3
-    assert crawler.stats.errors == 3
-    assert {req.url for req, _ in crawler.errors} == set(_AlwaysFails.start_urls)
+    crawl = excinfo.value.crawl
+    assert len(crawl.errors) == 3
+    assert crawl.stats.errors == 3
+    assert {req.url for req, _ in crawl.errors} == set(_AlwaysFails.start_urls)
     assert any('3 requests failed' in note for note in excinfo.value.__notes__)
 
 
 def test_the_failure_count_is_noted_once_not_once_per_entry_point(monkeypatch):
-    """crawl() runs inside open_crawler(); only one of them may annotate."""
+    """crawl() runs inside open_crawl(); only one of them may annotate."""
     _patch_client(monkeypatch)
 
     with pytest.raises(ValueError) as excinfo:
-        run_parser(_AlwaysFails)
+        run_crawler(_AlwaysFails)
 
     notes = [note for note in excinfo.value.__notes__ if 'requests failed' in note]
     assert len(notes) == 1
@@ -183,16 +183,16 @@ def test_a_single_failure_is_not_annotated_with_a_count(monkeypatch):
         start_urls = [URL]
 
     with pytest.raises(ValueError) as excinfo:
-        run_parser(_OneStart)
+        run_crawler(_OneStart)
 
-    assert len(excinfo.value.crawler.errors) == 1
+    assert len(excinfo.value.crawl.errors) == 1
     assert not any('requests failed' in note for note in getattr(excinfo.value, '__notes__', []))
 
 
-async def test_open_crawler_streams_and_exposes_stats(monkeypatch):
+async def test_open_crawl_streams_and_exposes_stats(monkeypatch):
     _patch_client(monkeypatch)
 
-    class _Three(Parser):
+    class _Three(Crawler):
         name = 'three'
         start_urls = [URL]
 
@@ -200,18 +200,18 @@ async def test_open_crawler_streams_and_exposes_stats(monkeypatch):
             for n in range(3):
                 yield {'n': n}
 
-    async with open_crawler(_Three) as crawler:
-        got = [item async for item in crawler.stream()]
-        assert crawler.stats.items == 3
+    async with open_crawl(_Three) as crawl:
+        got = [item async for item in crawl.stream()]
+        assert crawl.stats.items == 3
 
     assert got == [{'n': 0}, {'n': 1}, {'n': 2}]
 
 
-async def test_open_crawler_stops_a_crawl_a_consumer_walked_away_from(monkeypatch):
+async def test_open_crawl_stops_a_crawl_a_consumer_walked_away_from(monkeypatch):
     """The session must not close while workers are still using it."""
     http = _patch_client(monkeypatch)
 
-    class _Endless(Parser):
+    class _Endless(Crawler):
         name = 'endless_runner'
         start_urls = [URL]
 
@@ -219,25 +219,25 @@ async def test_open_crawler_stops_a_crawl_a_consumer_walked_away_from(monkeypatc
             yield {'tick': True}
             yield self.request(URL)
 
-    async with open_crawler(_Endless) as crawler:
-        async for _item in crawler.stream():
-            break  # no aclosing() — open_crawler has to catch this itself
-        run_task = crawler._run_task
+    async with open_crawl(_Endless) as crawl:
+        async for _item in crawl.stream():
+            break  # no aclosing() — open_crawl has to catch this itself
+        run_task = crawl._run_task
 
     assert run_task is not None and run_task.cancelled()
-    assert crawler._run_task is None
+    assert crawl._run_task is None
     calls_at_exit = len(http.calls)
     await asyncio.sleep(0.01)
     # Nothing kept crawling behind the closed session.
     assert len(http.calls) == calls_at_exit
 
 
-async def test_open_crawler_attaches_the_crawler_to_a_failure(monkeypatch):
+async def test_open_crawl_attaches_the_crawl_to_a_failure(monkeypatch):
     _patch_client(monkeypatch)
 
     with pytest.raises(ValueError) as excinfo:
-        async with open_crawler(_AlwaysFails) as crawler:
-            await crawler.run()
+        async with open_crawl(_AlwaysFails) as crawl:
+            await crawl.run()
 
-    assert excinfo.value.crawler is crawler
-    assert len(crawler.errors) == 3
+    assert excinfo.value.crawl is crawl
+    assert len(crawl.errors) == 3
