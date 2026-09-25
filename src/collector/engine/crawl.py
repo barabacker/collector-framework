@@ -216,7 +216,7 @@ class Crawl:
     async def _handle(self, req: Request, queue: asyncio.Queue[Request]) -> None:
         crawler = self.crawler
         raw = await crawler.http.request(req.method, req.url, **req.http_kwargs())
-        response = Response(raw, req)
+        response = Response(raw, req, crawler)
         callback = req.callback or crawler.parse
         async for result in callback(response):
             if isinstance(result, Request):

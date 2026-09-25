@@ -14,6 +14,14 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Changed
 
+- `Response.follow()` now forwards to `crawler.request()` instead of building
+  its own `Request`. The two used to duplicate the same field list and
+  quietly disagree about what a bare `callback=None` means: `.request()`
+  resolved it to `parse()` immediately, `.follow()` left it `None` and relied
+  on the engine to resolve it later. Both now go through the one place that
+  decides, so `Response` carries a `crawler` reference (optional, defaulting
+  to `None` — only `follow()` reads it, so building a bare `Response` to unit
+  test `selector()` or `json()` still needs nothing extra).
 - `RetryPolicy.statuses` accepts any `Collection[int]`, not only a `frozenset`.
   `frozenset` has no literal shorthand of its own — `frozenset({403, 429})` —
   so a plain `{403, 429}` now works too. Same trade-off as the hooks change

@@ -3,12 +3,15 @@
 from __future__ import annotations
 
 import json as jsonlib
-from typing import Any
+from typing import TYPE_CHECKING, Any
 from urllib.parse import urljoin
 
 from parsel import Selector
 
 from collector.crawler.request import Request
+
+if TYPE_CHECKING:
+    from collector.crawler.crawler import Crawler
 
 
 class Response:
@@ -19,13 +22,17 @@ class Response:
     ``text`` / ``status`` are plain attributes here too.
     """
 
-    def __init__(self, raw: Any, request: Request) -> None:
+    def __init__(self, raw: Any, request: Request, crawler: Crawler | None = None) -> None:
         self.request = request
         self.metadata = request.metadata
         self.status: int = raw.status_code
         self.text: str = raw.text
         self._raw = raw
         self._selector: Selector | None = None
+        #: Only ``follow()`` reads this — everything else here needs no crawl
+        #: at all, which is why building one to unit-test ``selector()`` or
+        #: ``json()`` is not required.
+        self.crawler = crawler
 
     @property
     def raw(self) -> Any:
@@ -76,14 +83,16 @@ class Response:
     ) -> Request:
         """Build a ``Request`` for a link on this page, resolving it first.
 
-        ``callback`` left as None means the crawler's ``parse()``, the same
-        default a request built by the crawler itself gets.
+        Forwards everything else to ``crawler.request()`` rather than building
+        its own ``Request`` — the two used to duplicate the same field list
+        and quietly disagree on what a bare ``callback=None`` means; now there
+        is exactly one place that decides.
         """
-        return Request(
-            url=self.urljoin(href),
+        return self.crawler.request(
+            self.urljoin(href),
             method=method,
             callback=callback,
-            metadata=metadata or {},
+            metadata=metadata,
             headers=headers,
             data=data,
             params=params,

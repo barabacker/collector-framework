@@ -2,12 +2,27 @@
 
 from __future__ import annotations
 
-from tests.conftest import FakeResponse
+from typing import Any
 
-from collector import Request, Response
+from tests.conftest import FakeHttp, FakeResponse
+
+from collector import Crawler, CrawlerContext, Request, Response
 
 HTML = '<html><body><h1>Лот 42</h1><a href="/next">next</a></body></html>'
 HTML_RESPONSE = FakeResponse(text=HTML)
+
+
+class _Following(Crawler):
+    """A minimal crawler, only so ``follow()`` has one to delegate to."""
+
+    name = 'following'
+
+    async def parse(self, response: Any):
+        yield {}
+
+
+def _crawler() -> _Following:
+    return _Following(CrawlerContext(http=FakeHttp()))
 
 
 def test_status_text_and_metadata_come_from_raw_and_request():
@@ -55,25 +70,30 @@ def test_urljoin_resolves_against_the_page_url():
 
 
 def test_follow_builds_a_request_with_an_absolute_url():
-    response = Response(HTML_RESPONSE, Request(url='https://example.test/a/page'))
+    crawler = _crawler()
+    response = Response(HTML_RESPONSE, Request(url='https://example.test/a/page'), crawler)
     href = response.selector().css('a::attr(href)').get()
 
     req = response.follow(href, metadata={'page': 2})
 
     assert req.url == 'https://example.test/next'
     assert req.metadata == {'page': 2}
-    # No callback means parse(), the same default the crawler's own request gets.
-    assert req.callback is None
+    # No explicit callback means whatever crawler.request() defaults it to —
+    # the same default a request built by the crawler itself gets, because
+    # follow() forwards to it rather than building its own Request.
+    assert req.callback == crawler.parse
 
 
 def test_follow_accepts_a_method_and_body():
-    response = Response(HTML_RESPONSE, Request(url='https://example.test/'))
+    crawler = _crawler()
+    response = Response(HTML_RESPONSE, Request(url='https://example.test/'), crawler)
     req = response.follow('/search', method='POST', data={'q': 'лот'})
     assert (req.method, req.data) == ('POST', {'q': 'лот'})
 
 
 def test_follow_carries_params_json_and_cookies():
-    response = Response(HTML_RESPONSE, Request(url='https://example.test/'))
+    crawler = _crawler()
+    response = Response(HTML_RESPONSE, Request(url='https://example.test/'), crawler)
     req = response.follow('/api', method='POST', params={'page': 3}, json={'q': 'лот'})
 
     assert req.url == 'https://example.test/api'
