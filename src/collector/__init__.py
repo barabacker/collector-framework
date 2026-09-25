@@ -4,7 +4,7 @@ Write a parser as a Spider: subclass :class:`Parser`, set ``start_urls``,
 and implement ``parse()`` as an async generator that yields ``Request`` objects
 to follow and items to emit. ``run_parser`` assembles the HTTP client the parser
 declares (impersonation, TLS quirks, response hooks) and runs the crawl,
-returning the ``Crawler`` that ran it — stats, failures and the parser itself.
+returning the ``Crawl`` that ran it — stats, failures and the parser itself.
 
 Parsers are plain classes: how an application names and looks one up — a
 registry, entry points, a dict — is its own business, not this package's.
@@ -24,7 +24,7 @@ re-exported here. The import you reach for says which of the two you are doing.
 
 from __future__ import annotations
 
-from collector.engine import Crawler, Stats, collect, crawl, open_crawler, run_parser
+from collector.engine import Crawl, Stats, collect, crawl, open_crawl, run_parser
 from collector.settings import DEFAULT_RETRY_STATUSES, RetryPolicy, Settings
 from collector.spider import Parser, ParserContext, Request, Response
 
@@ -34,7 +34,7 @@ __all__ = [
     #: Exported alongside RetryPolicy: narrowing or widening the retryable set
     #: is a parser's decision, and writing the default out by hand invites drift.
     'DEFAULT_RETRY_STATUSES',
-    'Crawler',
+    'Crawl',
     'Parser',
     'ParserContext',
     'Request',
@@ -45,6 +45,6 @@ __all__ = [
     '__version__',
     'collect',
     'crawl',
-    'open_crawler',
+    'open_crawl',
     'run_parser',
 ]

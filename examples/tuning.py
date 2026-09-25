@@ -60,8 +60,8 @@ class Polite(Fan):
 
 
 def report(label: str, parser_cls: type[Parser], **kwargs: Any) -> None:
-    crawler = run_parser(parser_cls, **kwargs)
-    stats = crawler.stats
+    crawl = run_parser(parser_cls, **kwargs)
+    stats = crawl.stats
     print(
         f'{label:<28} {stats.requests} requests, {stats.items} items, '
         f'{stats.elapsed:.1f}s, reason={stats.reason!r}'

@@ -1,7 +1,7 @@
 """Parser — the Spider-style class a scraper subclasses — and the context it runs in.
 
 ``ParserContext`` lives here because it is only ever built beside a parser and
-only ever read through one: it is the parser's half of a run, where ``Crawler``
+only ever read through one: it is the parser's half of a run, where ``Crawl``
 owns the other half.
 """
 
@@ -24,7 +24,7 @@ if TYPE_CHECKING:
 class ParserContext:
     """What a parser needs to run: HTTP client, params, optional sink and log.
 
-    Four fields, each with a reader: the crawler sends through ``http`` and
+    Four fields, each with a reader: the crawl sends through ``http`` and
     reads its limits out of ``params``, ``Parser.log()`` writes to ``log``,
     and ``sink`` is the application's own, passed through untouched.
 
@@ -52,7 +52,7 @@ class Parser(ABC):
 
     A parser is declarative and holds no state of its own: the queue, the
     workers, the counters and the failures all belong to
-    :class:`~collector.engine.crawler.Crawler`, which is what running one gives back.
+    :class:`~collector.engine.crawl.Crawl`, which is what running one gives back.
     """
 
     name: ClassVar[str]
@@ -112,6 +112,6 @@ class Parser(ABC):
 
         The framework stores nothing: an application overrides this to write the
         item to ``self.ctx.sink`` and to keep whatever counters it needs. The
-        crawl's own ``stats.items`` is counted by the crawler and stays accurate
+        crawl's own ``stats.items`` is counted by the crawl and stays accurate
         whether or not an override calls ``super()``.
         """

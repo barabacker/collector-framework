@@ -16,7 +16,7 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 - `build_http_client()` takes a keyword-only `concurrency`: the worker count
   the crawl will really run, which the params can raise above what `Settings`
-  declares. `open_crawler()` works it out and passes it, because only that side
+  declares. `open_crawl()` works it out and passes it, because only that side
   sees both. Left out, the declared value stands, so a direct caller is
   unaffected.
 
@@ -46,7 +46,7 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   way back, so it reports the response actually returned.
 - The package root exports what a *parser* author writes: `Parser`,
   `ParserContext`, `Request`, `Response`, `Settings`, `RetryPolicy`,
-  `DEFAULT_RETRY_STATUSES`, `Crawler`, `Stats` and the four entry points —
+  `DEFAULT_RETRY_STATUSES`, `Crawl`, `Stats` and the four entry points —
   fourteen names instead of twenty-four. The transport moves to
   `collector.http`, which is what a *hook* author writes: `HttpClient`,
   `RequestHook`, `ResponseHook`, `Throttle`, `build_http_client` and
@@ -61,13 +61,13 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   of them so an API change breaks them here rather than in front of a reader.
 - The modules are laid out in three packages, by what someone reaching for them
   is doing: `collector.spider` (`Parser`, `ParserContext`, `Request`,
-  `Response`), `collector.engine` (`Crawler`, `Stats` and the four entry points)
+  `Response`), `collector.engine` (`Crawl`, `Stats` and the four entry points)
   and `collector.http` (the transport). Each re-exports its own names.
   `collector.settings` stays a module beside them, because all three read it and
   it belongs to none. Imports from the package root are unchanged, which is how
   every test and the README already did it.
 - **Logger names moved with them.** Anything configuring logging per module
-  wants `collector.engine.crawler`, `collector.engine.runner` and
+  wants `collector.engine.crawl`, `collector.engine.runner` and
   `collector.engine.params` where it used to want `collector.crawler`,
   `collector.runner` and `collector.params`. The `collector` root logger still
   catches all of them.
@@ -82,18 +82,18 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Removed
 
-- `on_item`, the callback on `Crawler`, `crawl()`, `run_parser()` and
-  `open_crawler()`. An item now reaches its consumer two ways instead of three:
+- `on_item`, the callback on `Crawl`, `crawl()`, `run_parser()` and
+  `open_crawl()`. An item now reaches its consumer two ways instead of three:
   `process_item()` pushes it and `stream()` pulls it. A synchronous caller that
   wants the items keeps them on the parser and reads them back off
-  `crawler.parser` — which is what the README already recommends for an
+  `crawl.crawler` — which is what the README already recommends for an
   application's own counters — or calls `collect()`, which now drains
   `stream()` and still runs the class it was given, unsubclassed.
 - `read_max_pages()` and `read_flag()`. Neither was ever called by the
   framework. `read_max_pages` was the worse of the two: it promised a
   `max_pages` convention that the engine does not honour, so a parser that
   trusted the README got a knob that quietly did nothing. `read_concurrency`
-  and `read_max_requests` stay — the crawler reads them — but as
+  and `read_max_requests` stay — the crawl reads them — but as
   `collector.engine.params`, not package-level API.
 - `clean()`, the whitespace helper, and the `collector.text` module it lived
   in. Nothing in the framework ever called it and the README never mentioned

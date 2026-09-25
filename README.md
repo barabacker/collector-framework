@@ -42,7 +42,7 @@ browser impersonation via `curl_cffi` for sites that fingerprint TLS.
   `Request` to follow or anything else to emit it as an item, and
   `start_requests()` covers a start that a URL cannot express — a POST, or
   per-start metadata. It holds no run state of its own.
-- **`Crawler`** — the engine, and what running a parser gives back. It owns the
+- **`Crawl`** — the engine, and what running a parser gives back. It owns the
   queue and the `concurrency` workers, collects per-request errors instead of
   killing a worker, re-raises the first at the end, and carries `stats`,
   `errors` and the `parser` itself once the run is over.
@@ -66,19 +66,19 @@ browser impersonation via `curl_cffi` for sites that fingerprint TLS.
 - **Per-request transport** — a `Request` carries `headers`, `params`, `data`,
   `json` and `cookies`; what is session-wide instead (a proxy, a base header
   set) belongs in `Settings`.
-- **Streaming** — `crawler.stream()` yields items as they are produced, over a
+- **Streaming** — `crawl.stream()` yields items as they are produced, over a
   bounded channel, so a slow consumer applies backpressure and `break` stops the
-  crawl — `stats.reason` then reads `'cancelled'`, not `'done'`. `open_crawler()`
+  crawl — `stats.reason` then reads `'cancelled'`, not `'done'`. `open_crawl()`
   owns the HTTP session for as long as the iteration needs it, and stops a crawl
   a consumer walked away from.
 
 ```python
-async with open_crawler(Quotes) as crawler:
-    async for quote in crawler.stream():
+async with open_crawl(Quotes) as crawl:
+    async for quote in crawl.stream():
         await save(quote)
         if enough():
             break  # the crawl stops with it
-    print(crawler.stats)
+    print(crawl.stats)
 ```
 
 - **Params** — a run's `params` may override `concurrency` and `max_requests`
@@ -111,13 +111,13 @@ class Saving(Quotes):
         await self.ctx.sink.save(item)
 
 
-crawler = run_parser(Saving, sink=my_sink)
-crawler.stats  # Stats(requests=…, errors=…, items=…, reason='done')
-crawler.errors  # [(Request, Exception), …]
-crawler.parser  # the instance, for whatever counters the app kept on it
+crawl = run_parser(Saving, sink=my_sink)
+crawl.stats  # Stats(requests=…, errors=…, items=…, reason='done')
+crawl.errors  # [(Request, Exception), …]
+crawl.crawler  # the instance, for whatever counters the app kept on it
 ```
 
-`stats.items` is counted by the crawler, so an override that forgets `super()`
+`stats.items` is counted by the crawl, so an override that forgets `super()`
 cannot corrupt it. `stats.requests` counts requests the parser asked for —
 retries happen inside the HTTP client and are invisible to it.
 

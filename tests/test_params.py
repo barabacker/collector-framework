@@ -1,4 +1,4 @@
-"""The two knobs the crawler honours, read out of strings from the outside world.
+"""The two knobs the crawl honours, read out of strings from the outside world.
 
 Forgiving on purpose: a bad value in a job payload falls back to the default
 rather than killing the crawl, and the edge cases are what that promise is.

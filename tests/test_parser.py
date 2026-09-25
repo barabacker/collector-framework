@@ -25,7 +25,7 @@ def _parser() -> _TwoPages:
 
 
 def test_a_parser_keeps_no_run_state():
-    """Counters and failures belong to the Crawler; a parser is reusable and inert."""
+    """Counters and failures belong to the Crawl; a parser is reusable and inert."""
     parser = _parser()
     assert not hasattr(parser, 'item_count')
     assert not hasattr(parser, 'errors')

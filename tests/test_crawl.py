@@ -1,4 +1,4 @@
-"""Crawler.run(): queueing, item handling, concurrency, limits, stats and errors."""
+"""Crawl.run(): queueing, item handling, concurrency, limits, stats and errors."""
 
 from __future__ import annotations
 
@@ -10,7 +10,7 @@ from typing import Any
 import pytest
 from tests.conftest import FakeHttp
 
-from collector import Crawler, Parser, Request
+from collector import Crawl, Parser, Request
 
 PAGE_1 = 'https://example.test/p1'
 PAGE_2 = 'https://example.test/p2'
@@ -44,7 +44,7 @@ async def test_run_follows_requests_and_counts_items(ctx_factory):
     http = FakeHttp()
     ctx, _ = ctx_factory(http)
 
-    stats = await Crawler(_TwoPages(ctx)).run()
+    stats = await Crawl(_TwoPages(ctx)).run()
 
     assert stats.items == 2
     assert stats.requests == 2
@@ -60,15 +60,15 @@ async def test_process_item_override_receives_every_item(ctx_factory):
             seen.append(item)
 
     ctx, _ = ctx_factory(FakeHttp())
-    crawler = Crawler(_Collecting(ctx))
-    await crawler.run()
+    crawl = Crawl(_Collecting(ctx))
+    await crawl.run()
 
     assert [item['url'] for item in seen] == [PAGE_1, PAGE_2]
-    assert crawler.stats.items == 2
+    assert crawl.stats.items == 2
 
 
 async def test_a_sync_caller_reads_its_items_off_the_parser(ctx_factory):
-    """The one push path: keep them on self, read them back from crawler.parser."""
+    """The one push path: keep them on self, read them back from crawl.crawler."""
 
     class _Keeping(_TwoPages):
         def __init__(self, ctx: Any) -> None:
@@ -79,10 +79,10 @@ async def test_a_sync_caller_reads_its_items_off_the_parser(ctx_factory):
             self.kept.append(item)
 
     ctx, _ = ctx_factory(FakeHttp())
-    crawler = Crawler(_Keeping(ctx))
-    await crawler.run()
+    crawl = Crawl(_Keeping(ctx))
+    await crawl.run()
 
-    assert [item['url'] for item in crawler.parser.kept] == [PAGE_1, PAGE_2]
+    assert [item['url'] for item in crawl.crawler.kept] == [PAGE_1, PAGE_2]
 
 
 async def test_item_count_survives_an_override_that_forgets_super(ctx_factory):
@@ -91,7 +91,7 @@ async def test_item_count_survives_an_override_that_forgets_super(ctx_factory):
             pass  # no super() call
 
     ctx, _ = ctx_factory(FakeHttp())
-    assert (await Crawler(_Sloppy(ctx)).run()).items == 2
+    assert (await Crawl(_Sloppy(ctx)).run()).items == 2
 
 
 async def test_callback_metadata_reaches_the_response(ctx_factory):
@@ -106,7 +106,7 @@ async def test_callback_metadata_reaches_the_response(ctx_factory):
             yield {'page': response.metadata['page']}
 
     ctx, _ = ctx_factory(FakeHttp())
-    seen = [item async for item in Crawler(_WithMeta(ctx)).stream()]
+    seen = [item async for item in Crawl(_WithMeta(ctx)).stream()]
 
     assert seen == [{'page': 7}]
 
@@ -131,7 +131,7 @@ async def test_request_fields_reach_the_http_client(ctx_factory):
 
     http = FakeHttp()
     ctx, _ = ctx_factory(http)
-    await Crawler(_Api(ctx)).run()
+    await Crawl(_Api(ctx)).run()
 
     assert http.calls == [('POST', PAGE_1)]
     assert http.sent == [
@@ -142,7 +142,7 @@ async def test_request_fields_reach_the_http_client(ctx_factory):
 async def test_a_plain_request_sends_no_empty_transport_kwargs(ctx_factory):
     http = FakeHttp()
     ctx, _ = ctx_factory(http)
-    await Crawler(_TwoPages(ctx)).run()
+    await Crawl(_TwoPages(ctx)).run()
 
     assert http.sent == [{}, {}]
 
@@ -158,7 +158,7 @@ async def test_max_requests_stops_the_crawl(ctx_factory):
 
     http = FakeHttp()
     ctx, _ = ctx_factory(http)
-    stats = await Crawler(_Capped(ctx)).run()
+    stats = await Crawl(_Capped(ctx)).run()
 
     assert stats.requests == 1
     assert stats.items == 1
@@ -173,7 +173,7 @@ async def test_a_crawl_ending_exactly_on_the_limit_is_still_done(ctx_factory):
         settings = replace(_TwoPages.settings, max_requests=2)
 
     ctx, _ = ctx_factory(FakeHttp())
-    stats = await Crawler(_Capped(ctx)).run()
+    stats = await Crawl(_Capped(ctx)).run()
 
     assert stats.requests == 2
     assert stats.reason == 'done'
@@ -184,7 +184,7 @@ async def test_max_requests_param_overrides_the_setting(ctx_factory):
         settings = replace(_TwoPages.settings, max_requests=1)
 
     ctx, _ = ctx_factory(FakeHttp(), params={'max_requests': '2'})
-    stats = await Crawler(_Capped(ctx)).run()
+    stats = await Crawl(_Capped(ctx)).run()
 
     assert stats.requests == 2
     assert stats.reason == 'done'
@@ -200,8 +200,8 @@ async def test_no_limit_by_default(ctx_factory):
 
 async def test_stats_time_the_run(ctx_factory):
     ctx, _ = ctx_factory(FakeHttp())
-    crawler = Crawler(_TwoPages(ctx))
-    stats = await crawler.run()
+    crawl = Crawl(_TwoPages(ctx))
+    stats = await crawl.run()
 
     assert stats.finished_at is not None
     assert stats.elapsed >= 0.0
@@ -214,14 +214,14 @@ async def test_stats_time_the_run(ctx_factory):
 
 async def test_stats_count_errors_alongside_the_error_list(ctx_factory):
     ctx, _ = ctx_factory(FakeHttp())
-    crawler = Crawler(_FailingBoth(ctx))
+    crawl = Crawl(_FailingBoth(ctx))
 
     with pytest.raises(ValueError):
-        await crawler.run()
+        await crawl.run()
 
-    assert crawler.stats.errors == 2 == len(crawler.errors)
-    assert crawler.stats.requests == 2
-    assert crawler.stats.items == 0
+    assert crawl.stats.errors == 2 == len(crawl.errors)
+    assert crawl.stats.requests == 2
+    assert crawl.stats.items == 0
 
 
 # ── concurrency ─────────────────────────────────────────────────────────────
@@ -235,7 +235,7 @@ async def test_settings_concurrency_is_the_default_and_params_win(ctx_factory):
     assert _Parallel(ctx).settings.concurrency == 4
 
     ctx, _ = ctx_factory(FakeHttp(), params={'concurrency': '2'})
-    assert (await Crawler(_Parallel(ctx)).run()).items == 2
+    assert (await Crawl(_Parallel(ctx)).run()).items == 2
 
 
 async def test_cancelling_a_crawl_leaves_no_workers_behind(ctx_factory):
@@ -247,7 +247,7 @@ async def test_cancelling_a_crawl_leaves_no_workers_behind(ctx_factory):
             raise AssertionError('never reached')  # pragma: no cover
 
     ctx, _ = ctx_factory(_SlowHttp())
-    task = asyncio.create_task(Crawler(_TwoPages(ctx)).run())
+    task = asyncio.create_task(Crawl(_TwoPages(ctx)).run())
     await asyncio.sleep(0)
     before = len(asyncio.all_tasks())
     task.cancel()
@@ -275,25 +275,25 @@ async def test_one_bad_page_does_not_kill_the_worker(ctx_factory):
             yield {'ok': True}
 
     ctx, _ = ctx_factory(FakeHttp())
-    crawler = Crawler(_Failing(ctx))
+    crawl = Crawl(_Failing(ctx))
 
     with pytest.raises(ValueError, match='bad page'):
-        await crawler.run()
+        await crawl.run()
 
-    assert crawler.stats.items == 1
+    assert crawl.stats.items == 1
 
 
 async def test_every_error_is_collected_with_its_request(ctx_factory):
     ctx, _ = ctx_factory(FakeHttp())
-    crawler = Crawler(_FailingBoth(ctx))
+    crawl = Crawl(_FailingBoth(ctx))
 
     with pytest.raises(ValueError):
-        await crawler.run()
+        await crawl.run()
 
-    assert len(crawler.errors) == 2
-    assert {req.url for req, _ in crawler.errors} == {PAGE_1, PAGE_2}
-    assert all(isinstance(exc, ValueError) for _, exc in crawler.errors)
-    assert all(isinstance(req, Request) for req, _ in crawler.errors)
+    assert len(crawl.errors) == 2
+    assert {req.url for req, _ in crawl.errors} == {PAGE_1, PAGE_2}
+    assert all(isinstance(exc, ValueError) for _, exc in crawl.errors)
+    assert all(isinstance(req, Request) for req, _ in crawl.errors)
 
 
 async def test_the_reraised_error_carries_the_failing_url(ctx_factory):
@@ -302,7 +302,7 @@ async def test_the_reraised_error_carries_the_failing_url(ctx_factory):
 
     ctx, _ = ctx_factory(FakeHttp())
     with pytest.raises(ValueError) as excinfo:
-        await Crawler(_Failing(ctx)).run()
+        await Crawl(_Failing(ctx)).run()
 
     assert f'while handling GET {PAGE_1}' in excinfo.value.__notes__
 
@@ -314,8 +314,8 @@ async def test_errors_are_logged_as_they_happen(ctx_factory, caplog):
         start_urls = [PAGE_1]
 
     ctx, _ = ctx_factory(FakeHttp())
-    with caplog.at_level('WARNING', logger='collector.engine.crawler'), pytest.raises(ValueError):
-        await Crawler(_Failing(ctx)).run()
+    with caplog.at_level('WARNING', logger='collector.engine.crawl'), pytest.raises(ValueError):
+        await Crawl(_Failing(ctx)).run()
 
     assert f'crawl.error GET {PAGE_1}' in caplog.text
 
@@ -334,18 +334,18 @@ class _FiveItems(Parser):
 
 async def test_stream_yields_every_item(ctx_factory):
     ctx, _ = ctx_factory(FakeHttp())
-    crawler = Crawler(_FiveItems(ctx))
+    crawl = Crawl(_FiveItems(ctx))
 
-    got = [item async for item in crawler.stream()]
+    got = [item async for item in crawl.stream()]
 
     assert got == [{'n': n} for n in range(5)]
-    assert crawler.stats.items == 5
-    assert crawler.stats.reason == 'done'
+    assert crawl.stats.items == 5
+    assert crawl.stats.reason == 'done'
 
 
 async def test_stream_yields_across_pages(ctx_factory):
     ctx, _ = ctx_factory(FakeHttp())
-    got = [item async for item in Crawler(_TwoPages(ctx)).stream()]
+    got = [item async for item in Crawl(_TwoPages(ctx)).stream()]
     assert {item['url'] for item in got} == {PAGE_1, PAGE_2}
 
 
@@ -358,7 +358,7 @@ async def test_stream_still_runs_the_parsers_process_item(ctx_factory):
             pushed.append(item)
 
     ctx, _ = ctx_factory(FakeHttp())
-    streamed = [item async for item in Crawler(_Noting(ctx)).stream()]
+    streamed = [item async for item in Crawl(_Noting(ctx)).stream()]
 
     assert pushed == streamed
 
@@ -376,15 +376,15 @@ async def test_stream_raises_after_yielding_what_succeeded(ctx_factory):
             yield {'ok': True}
 
     ctx, _ = ctx_factory(FakeHttp())
-    crawler = Crawler(_ItemThenFail(ctx))
+    crawl = Crawl(_ItemThenFail(ctx))
 
     got: list[Any] = []
     with pytest.raises(ValueError, match='boom'):
-        async for item in crawler.stream():
+        async for item in crawl.stream():
             got.append(item)
 
     assert got == [{'ok': True}]
-    assert len(crawler.errors) == 1
+    assert len(crawl.errors) == 1
 
 
 async def test_breaking_out_stops_an_endless_crawl(ctx_factory):
@@ -400,11 +400,11 @@ async def test_breaking_out_stops_an_endless_crawl(ctx_factory):
 
     http = FakeHttp()
     ctx, _ = ctx_factory(http)
-    crawler = Crawler(_Endless(ctx))
+    crawl = Crawl(_Endless(ctx))
 
     got = []
     # A timeout rather than a hang if backpressure or cancellation regress.
-    async with asyncio.timeout(5), aclosing(crawler.stream()) as stream:
+    async with asyncio.timeout(5), aclosing(crawl.stream()) as stream:
         async for item in stream:
             got.append(item)
             if len(got) == 3:
@@ -431,17 +431,17 @@ async def test_an_abandoned_stream_leaves_the_crawl_running(ctx_factory):
             yield self.request(PAGE_1)
 
     ctx, _ = ctx_factory(FakeHttp())
-    crawler = Crawler(_Endless(ctx))
+    crawl = Crawl(_Endless(ctx))
 
-    async for _item in crawler.stream():
-        break  # no aclosing(), no open_crawler() — the crawl is still going
+    async for _item in crawl.stream():
+        break  # no aclosing(), no open_crawl() — the crawl is still going
 
     await asyncio.sleep(0)
-    run_task = crawler._run_task
+    run_task = crawl._run_task
     assert run_task is not None and not run_task.done()
 
-    await crawler.aclose()
-    assert crawler._run_task is None
+    await crawl.aclose()
+    assert crawl._run_task is None
     assert run_task.cancelled()
 
 
@@ -457,13 +457,13 @@ async def test_a_stopped_crawl_does_not_report_itself_as_done(ctx_factory):
             yield self.request(PAGE_1)
 
     ctx, _ = ctx_factory(FakeHttp())
-    crawler = Crawler(_Endless(ctx))
+    crawl = Crawl(_Endless(ctx))
 
-    async for _item in crawler.stream():
+    async for _item in crawl.stream():
         break
-    await crawler.aclose()
+    await crawl.aclose()
 
-    assert crawler.stats.reason == 'cancelled'
+    assert crawl.stats.reason == 'cancelled'
 
 
 async def test_a_crawl_cancelled_from_outside_says_so(ctx_factory):
@@ -473,14 +473,14 @@ async def test_a_crawl_cancelled_from_outside_says_so(ctx_factory):
             raise AssertionError('never reached')  # pragma: no cover
 
     ctx, _ = ctx_factory(_SlowHttp())
-    crawler = Crawler(_TwoPages(ctx))
-    task = asyncio.create_task(crawler.run())
+    crawl = Crawl(_TwoPages(ctx))
+    task = asyncio.create_task(crawl.run())
     await asyncio.sleep(0)
     task.cancel()
     with pytest.raises(asyncio.CancelledError):
         await task
 
-    assert crawler.stats.reason == 'cancelled'
+    assert crawl.stats.reason == 'cancelled'
 
 
 async def test_stream_respects_max_requests(ctx_factory):
@@ -488,20 +488,20 @@ async def test_stream_respects_max_requests(ctx_factory):
         settings = replace(_TwoPages.settings, max_requests=1)
 
     ctx, _ = ctx_factory(FakeHttp())
-    crawler = Crawler(_Capped(ctx))
-    got = [item async for item in crawler.stream()]
+    crawl = Crawl(_Capped(ctx))
+    got = [item async for item in crawl.stream()]
 
     assert got == [{'url': PAGE_1}]
-    assert crawler.stats.reason == 'max_requests'
+    assert crawl.stats.reason == 'max_requests'
 
 
 async def test_the_channel_is_bounded_by_concurrency(ctx_factory):
     """Unbounded would buffer the whole crawl in memory and drop backpressure."""
     ctx, _ = ctx_factory(FakeHttp(), params={'concurrency': '3'})
-    assert Crawler(_TwoPages(ctx))._buffer_size() == 3
+    assert Crawl(_TwoPages(ctx))._buffer_size() == 3
 
     ctx, _ = ctx_factory(FakeHttp())
-    assert Crawler(_TwoPages(ctx))._buffer_size() == 1
+    assert Crawl(_TwoPages(ctx))._buffer_size() == 1
 
 
 async def test_a_slow_consumer_holds_the_crawl_back(ctx_factory):
@@ -510,7 +510,7 @@ async def test_a_slow_consumer_holds_the_crawl_back(ctx_factory):
     ctx, _ = ctx_factory(http)
 
     seen = 0
-    async for _item in Crawler(_FiveItems(ctx)).stream():
+    async for _item in Crawl(_FiveItems(ctx)).stream():
         seen += 1
         if seen == 1:
             # One item read, one parked in the channel — the worker is blocked
@@ -529,7 +529,7 @@ async def test_a_crawl_declaring_no_workers_still_runs(ctx_factory):
 
     ctx, _ = ctx_factory(FakeHttp())
     async with asyncio.timeout(5):
-        stats = await Crawler(_NoWorkers(ctx)).run()
+        stats = await Crawl(_NoWorkers(ctx)).run()
 
     assert stats.items == 2
     assert stats.reason == 'done'
@@ -543,4 +543,4 @@ async def test_a_bad_concurrency_param_cannot_stall_the_crawl(ctx_factory):
 
     ctx, _ = ctx_factory(FakeHttp(), params={'concurrency': 'lots'})
     async with asyncio.timeout(5):
-        assert (await Crawler(_NoWorkers(ctx)).run()).items == 2
+        assert (await Crawl(_NoWorkers(ctx)).run()).items == 2

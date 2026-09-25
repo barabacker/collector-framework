@@ -1,18 +1,18 @@
 """Where a crawl is assembled, and the bridge to synchronous callers.
 
 Everything a run needs — the HTTP client the parser declares, the context, the
-parser instance, the crawler around it — is put together in exactly one place:
-:func:`open_crawler`. The other three entry points are conveniences over it, so
+parser instance, the crawl around it — is put together in exactly one place:
+:func:`open_crawl`. The other three entry points are conveniences over it, so
 there is no second copy of the assembly to drift.
 
-    open_crawler()              owns the session for as long as it is used
+    open_crawl()                owns the session for as long as it is used
       └── crawl()               run to completion, async
             └── run_parser()    the same, for a caller with no event loop
                   └── collect() the same, handing back the items
 
 A crawl is asynchronous, but the thing that starts it usually is not — a CLI, a
 cron entry, an RQ task — which is what ``run_parser`` is for. All four hand back
-the :class:`~collector.engine.crawler.Crawler`, which carries the stats, the failures
+the :class:`~collector.engine.crawl.Crawl`, which carries the stats, the failures
 and the parser instance itself.
 """
 
@@ -25,7 +25,7 @@ from collections.abc import AsyncIterator, Awaitable, Callable
 from contextlib import asynccontextmanager
 from typing import Any
 
-from collector.engine.crawler import Crawler
+from collector.engine.crawl import Crawl
 from collector.engine.params import worker_count
 from collector.http.client import build_http_client
 from collector.spider.parser import Parser, ParserContext
@@ -34,27 +34,27 @@ logger = logging.getLogger(__name__)
 
 
 @asynccontextmanager
-async def open_crawler(
+async def open_crawl(
     parser_cls: type[Parser],
     *,
     params: dict[str, str] | None = None,
     sink: Any | None = None,
     log: Callable[[str], Awaitable[None]] | None = None,
-) -> AsyncIterator[Crawler]:
-    """Build a crawler and keep its HTTP session open for as long as it is used.
+) -> AsyncIterator[Crawl]:
+    """Build a crawl and keep its HTTP session open for as long as it is used.
 
     What ``stream()`` needs: the session has to outlive the iteration, and a
     consumer that stops early has to close it deterministically. A context
     manager does that where an async generator wrapping ``async with`` would
     leave it to whenever the generator happened to be finalised.
 
-        async with open_crawler(Quotes) as crawler:
-            async for quote in crawler.stream():
+        async with open_crawl(Quotes) as crawl:
+            async for quote in crawl.stream():
                 await save(quote)
-            print(crawler.stats)
+            print(crawl.stats)
 
     It is also the one place a crawl is assembled, so a failure anywhere under
-    it leaves by the same door — with the crawler attached to the exception.
+    it leaves by the same door — with the crawl attached to the exception.
     """
     # The session's connection pool is sized here rather than inside the
     # builder, because only this side knows the params that can raise the
@@ -64,16 +64,16 @@ async def open_crawler(
         parser_cls, concurrency=worker_count(params, parser_cls.settings.concurrency)
     )
     async with http:
-        crawler = Crawler(parser_cls(ParserContext(http=http, params=params, sink=sink, log=log)))
+        crawl = Crawl(parser_cls(ParserContext(http=http, params=params, sink=sink, log=log)))
         try:
-            yield crawler
+            yield crawl
         except Exception as exc:
-            _attach_crawler(exc, crawler)
+            _attach_crawl(exc, crawl)
             raise
         finally:
             # Before the session closes: a consumer that broke out of stream()
             # may have left the crawl running, and its workers hold that session.
-            await crawler.aclose()
+            await crawl.aclose()
 
 
 async def crawl(
@@ -82,16 +82,16 @@ async def crawl(
     params: dict[str, str] | None = None,
     sink: Any | None = None,
     log: Callable[[str], Awaitable[None]] | None = None,
-) -> Crawler:
-    """Run a parser to completion and return the crawler that ran it.
+) -> Crawl:
+    """Run a parser to completion and return the crawl that ran it.
 
     The async entry point: use it when the caller already runs an event loop.
-    A failure propagates with the crawler attached — ``open_crawler`` does that
+    A failure propagates with the crawl attached — ``open_crawl`` does that
     on the way out, and does it once.
     """
-    async with open_crawler(parser_cls, params=params, sink=sink, log=log) as crawler:
-        await crawler.run()
-    return crawler
+    async with open_crawl(parser_cls, params=params, sink=sink, log=log) as run:
+        await run.run()
+    return run
 
 
 def run_parser(
@@ -100,15 +100,15 @@ def run_parser(
     params: dict[str, str] | None = None,
     sink: Any | None = None,
     log: Callable[[str], Awaitable[None]] | None = None,
-) -> Crawler:
-    """Run a parser to completion synchronously; return the crawler that ran it.
+) -> Crawl:
+    """Run a parser to completion synchronously; return the crawl that ran it.
 
     ``sink`` is whatever the parser's ``process_item()`` expects — the framework
     only passes it through. ``log`` defaults to an async wrapper around this
     module's logger.
 
     Items reach the caller through the parser: override ``process_item()``, keep
-    what you need on ``self``, and read it back off ``crawler.parser``.
+    what you need on ``self``, and read it back off ``crawl.crawler``.
     """
     return asyncio.run(
         crawl(parser_cls, params=params, sink=sink, log=log or _default_log(parser_cls))
@@ -133,10 +133,10 @@ def collect(
     """
 
     async def drain() -> list[Any]:
-        async with open_crawler(
+        async with open_crawl(
             parser_cls, params=params, log=log or _default_log(parser_cls)
-        ) as crawler:
-            return [item async for item in crawler.stream()]
+        ) as run:
+            return [item async for item in run.stream()]
 
     return asyncio.run(drain())
 
@@ -150,20 +150,20 @@ def _default_log(parser_cls: type[Parser]) -> Callable[[str], Awaitable[None]]:
     return log
 
 
-def _attach_crawler(exc: BaseException, crawler: Crawler) -> None:
-    """Make a failed crawl's crawler reachable from the exception it raised.
+def _attach_crawl(exc: BaseException, crawl: Crawl) -> None:
+    """Make a failed run's ``Crawl`` reachable from the exception it raised.
 
-    ``run()`` re-raises the first failure only, and raising drops the crawler
+    ``run()`` re-raises the first failure only, and raising drops the crawl
     with the frame that held it — so a crawl that survived twenty bad pages
     could report one and lose the other nineteen. They ride out on the
-    exception instead, as ``exc.crawler.errors``.
+    exception instead, as ``exc.crawl.errors``.
 
-    Called from ``open_crawler`` alone. Calling it twice on its way up a nested
+    Called from ``open_crawl`` alone. Calling it twice on its way up a nested
     stack of entry points would note the same failure count twice.
     """
     with contextlib.suppress(AttributeError):
-        # An exception with __slots__ and no __dict__ cannot carry the crawler.
+        # An exception with __slots__ and no __dict__ cannot carry the crawl.
         # Losing it is bad; masking the error the caller came for is worse.
-        exc.crawler = crawler  # type: ignore[attr-defined]
-    if len(crawler.errors) > 1:
-        exc.add_note(f'{len(crawler.errors)} requests failed in this crawl; see exc.crawler.errors')
+        exc.crawl = crawl  # type: ignore[attr-defined]
+    if len(crawl.errors) > 1:
+        exc.add_note(f'{len(crawl.errors)} requests failed in this crawl; see exc.crawl.errors')

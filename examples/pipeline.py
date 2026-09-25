@@ -5,9 +5,9 @@ The framework stores nothing and knows no item schema. An application overrides
 back untouched — which is how a database, a file or a queue gets involved
 without this package knowing any of them exist.
 
-Anything the run accumulates lives on the parser, and ``crawler.parser`` is the
+Anything the run accumulates lives on the parser, and ``crawl.crawler`` is the
 instance that ran, so a synchronous caller reads its own counters back off it
-when the crawl is over. ``stats.items`` is counted by the crawler instead, so an
+when the crawl is over. ``stats.items`` is counted by the crawl instead, so an
 override that forgets ``super()`` cannot corrupt it.
 
     uv run python examples/pipeline.py
@@ -45,7 +45,7 @@ class Quotes(Parser):
     def __init__(self, ctx: ParserContext) -> None:
         super().__init__(ctx)
         # Run state belongs to the parser instance, not to a module global:
-        # crawler.parser is how the caller gets it back.
+        # crawl.crawler is how the caller gets it back.
         self.by_author: Counter[str] = Counter()
 
     async def parse(self, response: Response) -> Any:
@@ -75,13 +75,13 @@ def main() -> None:
     out = Path('quotes.jsonl')
     sink = JsonLines(out)
     try:
-        crawler = run_parser(Quotes, sink=sink)
+        crawl = run_parser(Quotes, sink=sink)
     finally:
         sink.close()
 
-    print(crawler.stats)
+    print(crawl.stats)
     print(f'wrote {out} ({out.stat().st_size} bytes)')
-    for author, count in crawler.parser.by_author.most_common(3):
+    for author, count in crawl.crawler.by_author.most_common(3):
         print(f'  {count:>2} × {author}')
 
 

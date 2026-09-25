@@ -4,10 +4,10 @@ A request that blows up in ``parse()`` is collected, not fatal — the worker
 takes the next one, and the crawl finishes. Only at the end does ``run()``
 re-raise the first failure, so a bad page cannot pass silently either.
 
-Which leaves the problem this example is really about: raising drops the crawler
+Which leaves the problem this example is really about: raising drops the crawl
 with the frame that held it, so a crawl that survived twenty bad pages would
 report one and lose nineteen. They ride out on the exception instead, as
-``exc.crawler`` — with the stats, and every failure paired with the request that
+``exc.crawl`` — with the stats, and every failure paired with the request that
 caused it.
 
 A retryable status is *not* a failure: 429 and the 5xx family are retried inside
@@ -49,19 +49,19 @@ class Strict(Parser):
 
 def main() -> None:
     try:
-        crawler = run_parser(Strict)
+        crawl = run_parser(Strict)
     except Exception as exc:  # noqa: BLE001 — showing what arrives, not handling it
-        crawler = exc.crawler
+        crawl = exc.crawl
         print(f'raised: {type(exc).__name__}: {exc}')
 
-    print(crawler.stats)
-    print(f'\n{len(crawler.errors)} of {crawler.stats.requests} requests failed:')
-    for request, error in crawler.errors:
+    print(crawl.stats)
+    print(f'\n{len(crawl.errors)} of {crawl.stats.requests} requests failed:')
+    for request, error in crawl.errors:
         print(f'  {request.method} {request.url} -> {error}')
 
     # The two good pages were still parsed and emitted; the crawl did not stop
     # at the first bad one.
-    print(f'\nitems emitted anyway: {crawler.stats.items}')
+    print(f'\nitems emitted anyway: {crawl.stats.items}')
 
 
 if __name__ == '__main__':
