@@ -16,9 +16,9 @@ from collections.abc import AsyncIterator
 from dataclasses import dataclass, field
 from typing import TYPE_CHECKING, Any
 
-from collector.engine.params import read_max_requests, worker_count
 from collector.crawler.request import Request
 from collector.crawler.response import Response
+from collector.engine.params import read_max_requests, worker_count
 
 if TYPE_CHECKING:
     from collector.crawler.crawler import Crawler

@@ -25,10 +25,10 @@ from collections.abc import AsyncIterator, Awaitable, Callable
 from contextlib import asynccontextmanager
 from typing import Any
 
+from collector.crawler.crawler import Crawler, CrawlerContext
 from collector.engine.crawl import Crawl
 from collector.engine.params import worker_count
 from collector.http.client import build_http_client
-from collector.crawler.crawler import Crawler, CrawlerContext
 
 logger = logging.getLogger(__name__)
 

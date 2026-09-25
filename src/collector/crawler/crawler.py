@@ -12,9 +12,9 @@ from collections.abc import AsyncIterator, Awaitable, Callable
 from dataclasses import dataclass, field
 from typing import TYPE_CHECKING, Any, ClassVar
 
-from collector.settings import Settings
 from collector.crawler.request import Request
 from collector.crawler.response import Response
+from collector.settings import Settings
 
 if TYPE_CHECKING:
     from collector.http.client import HttpClient
