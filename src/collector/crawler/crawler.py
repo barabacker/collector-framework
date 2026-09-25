@@ -90,6 +90,15 @@ class Crawler(ABC):
             cookies=cookies,
         )
 
+    async def opened(self) -> None:  # noqa: B027 — optional hook
+        """Run once before the crawl starts. A no-op here; override for async setup.
+
+        ``__init__`` cannot ``await`` anything, so this is where a crawler logs
+        in or opens a connection pool before ``start_requests()`` runs. If this
+        raises, the crawl never starts and ``closed()`` is not called — the
+        same rule an ``async with`` block follows when ``__aenter__`` fails.
+        """
+
     async def start_requests(self) -> AsyncIterator[Request]:
         """The requests a crawl begins with. Defaults to ``start_urls``.
 

@@ -227,6 +227,42 @@ async def test_stats_count_errors_alongside_the_error_list(ctx_factory):
 # ── lifecycle ────────────────────────────────────────────────────────────────
 
 
+async def test_opened_is_called_before_start_requests(ctx_factory):
+    calls: list[str] = []
+
+    class _Tracking(_TwoPages):
+        async def opened(self) -> None:
+            calls.append('opened')
+
+        async def start_requests(self):
+            calls.append('start_requests')
+            async for req in super().start_requests():
+                yield req
+
+    ctx, _ = ctx_factory(FakeHttp())
+    await Crawl(_Tracking(ctx)).run()
+
+    assert calls == ['opened', 'start_requests']
+
+
+async def test_closed_is_not_called_when_opened_fails(ctx_factory):
+    """Nothing opened means nothing to close — mirrors ``async with``."""
+    closed_calls: list[Any] = []
+
+    class _Failing(_TwoPages):
+        async def opened(self) -> None:
+            raise ValueError('setup failed')
+
+        async def closed(self, stats: Any) -> None:
+            closed_calls.append(stats)
+
+    ctx, _ = ctx_factory(FakeHttp())
+    with pytest.raises(ValueError, match='setup failed'):
+        await Crawl(_Failing(ctx)).run()
+
+    assert closed_calls == []
+
+
 async def test_closed_is_called_with_the_final_stats(ctx_factory):
     seen: list[Any] = []
 

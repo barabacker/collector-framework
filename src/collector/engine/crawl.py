@@ -178,6 +178,10 @@ class Crawl:
         limit = read_max_requests(params, crawler.settings.max_requests)
 
         self.stats.started_at = time.monotonic()
+        # Before start_requests(), not inside the try/finally below: if this
+        # raises, nothing was opened, so closed() has nothing to undo — the
+        # same rule ``async with`` follows when ``__aenter__`` fails.
+        await crawler.opened()
         queue: asyncio.Queue[Request] = asyncio.Queue()
         async for req in crawler.start_requests():
             queue.put_nowait(req)

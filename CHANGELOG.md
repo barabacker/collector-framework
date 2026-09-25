@@ -17,10 +17,13 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   passed to it rather than pacing on its own; `delay` was already a plain
   attribute, so nothing else needed to change to let something adjust it
   between requests.
+- `Crawler.opened()` — an optional hook run once before the crawl starts, for
+  async setup `__init__` cannot do (logging in, opening a connection pool). If
+  it raises, the crawl never starts and `closed()` is not called — the same
+  rule `async with` follows when `__aenter__` fails.
 - `Crawler.closed(stats)` — an optional hook run once the crawl is over,
-  whatever `stats.reason` turns out to be. No-op by default; override it to
-  release something opened in `__init__` — the one place `process_item()`
-  running per item cannot cover.
+  whatever `stats.reason` turns out to be, as long as `opened()` succeeded.
+  No-op by default; override it to release what `opened()` set up.
 
 ### Changed
 
