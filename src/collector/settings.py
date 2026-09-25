@@ -8,7 +8,7 @@ setting that changes mid-run is a bug, not a feature.
 
 from __future__ import annotations
 
-from collections.abc import Mapping
+from collections.abc import Mapping, Sequence
 from dataclasses import dataclass, field
 from typing import TYPE_CHECKING, Any
 
@@ -76,5 +76,7 @@ class Settings:
 
     # ── policy and hooks ────────────────────────────────────────────────────
     retry: RetryPolicy = RetryPolicy()
-    request_hooks: tuple[RequestHook, ...] = ()
-    response_hooks: tuple[ResponseHook, ...] = ()
+    #: A tuple works, but so does a list — a single-item tuple's trailing
+    #: comma is easy to forget. ``build_http_client`` only ever iterates these.
+    request_hooks: Sequence[RequestHook] = ()
+    response_hooks: Sequence[ResponseHook] = ()

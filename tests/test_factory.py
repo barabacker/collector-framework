@@ -134,6 +134,14 @@ def test_hooks_run_in_the_order_the_crawler_declared_them(captured):
     assert client.response_hooks == (_hook, _other_hook, log_response)
 
 
+def test_hooks_can_be_declared_as_a_list_not_only_a_tuple(captured):
+    """A single-element tuple needs a trailing comma; a list does not."""
+    client = build_http_client(_with(request_hooks=[_req_hook], response_hooks=[_hook]))
+
+    assert client.request_hooks == (log_request, _req_hook)
+    assert client.response_hooks == (_hook, log_response)
+
+
 def test_delay_installs_a_throttle(captured):
     client = build_http_client(_with(delay=0.5, delay_jitter=0.2))
     throttles = [h for h in client.request_hooks if isinstance(h, Throttle)]

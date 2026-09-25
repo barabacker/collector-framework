@@ -78,8 +78,8 @@ class Protected(Crawler):
         delay=0.5,
         # Order is the whole contract: these run front to back before each round
         # trip, after the logging hook and the Throttle the factory installs.
-        request_hooks=(stopwatch, send_referer),
-        response_hooks=(authenticate,),
+        request_hooks=[stopwatch, send_referer],
+        response_hooks=[authenticate],
     )
 
     async def parse(self, response: Response) -> Any:

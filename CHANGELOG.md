@@ -14,6 +14,13 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Changed
 
+- `Settings.request_hooks` / `response_hooks` accept any `Sequence`, not only
+  a `tuple`. A single hook no longer needs the easy-to-forget trailing comma a
+  one-element tuple requires (`response_hooks=[authenticate]` instead of
+  `response_hooks=(authenticate,)`). `build_http_client()` only ever iterates
+  them, so nothing downstream cared that they were tuples specifically —
+  `headers` and `session_kwargs` already took the same wider-type-for-a-
+  friendlier-call-site trade on this same class.
 - The engine object a run gives back was also called `Crawler` — the same
   name the class an author subclasses settles on, below — which would have
   made every future doc ambiguous about which one a reader meant. It's now
