@@ -8,7 +8,7 @@ setting that changes mid-run is a bug, not a feature.
 
 from __future__ import annotations
 
-from collections.abc import Mapping, Sequence
+from collections.abc import Collection, Mapping, Sequence
 from dataclasses import dataclass, field
 from typing import TYPE_CHECKING, Any
 
@@ -33,7 +33,9 @@ class RetryPolicy:
     multiplier: float = 1.0
     min_wait: float = 1.0
     max_wait: float = 60.0
-    statuses: frozenset[int] = DEFAULT_RETRY_STATUSES
+    #: A frozenset works, but so does a plain ``{...}`` literal — frozenset has
+    #: no shorthand of its own. Only ever checked with ``in``.
+    statuses: Collection[int] = DEFAULT_RETRY_STATUSES
     #: Honour a ``Retry-After`` header when the server sends one.
     respect_retry_after: bool = True
     #: Cap on what a server may ask us to wait; longer means give up instead.

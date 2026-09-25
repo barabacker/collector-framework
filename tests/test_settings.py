@@ -38,6 +38,13 @@ def test_retry_statuses_are_the_transient_ones():
     assert 404 not in DEFAULT_RETRY_STATUSES
 
 
+def test_statuses_can_be_declared_as_a_set_not_only_a_frozenset():
+    """``frozenset({...})`` has no literal shorthand; a plain ``{...}`` does."""
+    policy = RetryPolicy(statuses={403, 429})
+    assert 403 in policy.statuses
+    assert 500 not in policy.statuses
+
+
 @pytest.mark.parametrize(
     ('attempt', 'expected'),
     [(1, 1.0), (2, 2.0), (3, 4.0), (4, 8.0), (10, 60.0)],

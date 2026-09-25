@@ -14,6 +14,11 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Changed
 
+- `RetryPolicy.statuses` accepts any `Collection[int]`, not only a `frozenset`.
+  `frozenset` has no literal shorthand of its own — `frozenset({403, 429})` —
+  so a plain `{403, 429}` now works too. Same trade-off as the hooks change
+  below: only ever checked with `in`, so nothing cared it was a frozenset
+  specifically.
 - `Settings.request_hooks` / `response_hooks` accept any `Sequence`, not only
   a `tuple`. A single hook no longer needs the easy-to-forget trailing comma a
   one-element tuple requires (`response_hooks=[authenticate]` instead of
