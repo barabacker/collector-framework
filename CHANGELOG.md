@@ -8,6 +8,11 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Added
 
+- `Settings.max_errors` (default `0`), overridable per run with
+  `params['max_errors']`: up to that many failed requests a crawl carries on
+  and succeeds with them in `crawl.errors`; one more stops it —
+  `stats.reason == 'max_errors'`, nothing new sent, though requests other
+  workers already took still go out — and fails it. `None` for no limit.
 - `collector.storage`: `Dataset` — append-only, each item tagged with the
   crawler that emitted it, `push_data` / `iterate_items(crawler=)` / `flush` /
   `close`, and `export_to()` for `.json`, `.jsonl` and `.csv` — with
@@ -64,8 +69,8 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   attribute, so nothing else needed to change to let something adjust it
   between requests.
 - `Crawler.on_error(request, exc)` — an optional hook run when a request
-  fails. The framework still collects it in `errors` and re-raises the first
-  one at the end regardless of whether this is overridden; a broken override
+  fails. The framework still collects it in `errors` and applies its
+  `max_errors` policy either way; a broken override
   is logged and otherwise ignored, so it cannot take the worker down with it.
 - `Crawler.opened()` — an optional hook run once before the crawl starts, for
   async setup `__init__` cannot do (logging in, opening a connection pool). If
@@ -77,6 +82,10 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Changed
 
+- **Behaviour change:** a crawl no longer runs to the end and then fails
+  because some request failed. With the default `max_errors=0` it stops at the
+  first failure without sending the rest; a crawler that should survive bad
+  pages sets `max_errors`, and `max_errors=None` never stops or fails on them.
 - **Behaviour change:** a crawl no longer sends a request it has already
   queued in the same run; the repeat is dropped and counted in
   `stats.duplicates`. `Settings(dedupe=False)` restores the old behaviour for a

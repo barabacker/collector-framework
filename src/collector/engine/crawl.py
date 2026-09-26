@@ -18,7 +18,7 @@ from typing import TYPE_CHECKING, Any
 
 from collector.crawler.request import Request, request_key
 from collector.crawler.response import Response
-from collector.engine.params import read_max_requests, worker_count
+from collector.engine.params import read_max_errors, read_max_requests, worker_count
 
 if TYPE_CHECKING:
     from collector.crawler.crawler import Crawler
@@ -46,7 +46,8 @@ class Stats:
     started_at: float = 0.0
     finished_at: float | None = None
     #: Why the crawl ended: ``'done'`` (the queue drained), ``'max_requests'``
-    #: (the ceiling was reached) or ``'cancelled'`` (something stopped it — a
+    #: (the ceiling was reached), ``'max_errors'`` (more requests failed than
+    #: it tolerates) or ``'cancelled'`` (something stopped it — a
     #: consumer that broke out of ``stream()``, or a cancel from outside).
     reason: str = 'done'
 
@@ -61,7 +62,7 @@ class CrawlError(Exception):
     """A crawl failed. The original failure is chained as ``__cause__``.
 
     ``crawl`` carries the stats and every failure the crawl collected, not
-    only the one that ends up here — a crawl that survived twenty bad pages
+    only the one that ends up here — a crawl stopped after twenty failures
     reports one on ``__cause__`` and all twenty on ``crawl.errors``.
     """
 
@@ -88,8 +89,9 @@ class Crawl:
 
     crawler: Crawler
     stats: Stats = field(default_factory=Stats)
-    #: Every request that failed, paired with its exception. ``run()`` re-raises
-    #: the first, but a crawl that survived twenty failures should show twenty.
+    #: Every request that failed, paired with its exception, up to and past
+    #: ``max_errors``. A crawl that survived twenty failures shows all twenty
+    #: here even though ``run()`` never raises for it.
     errors: list[tuple[Request, Exception]] = field(default_factory=list)
     #: Where every item this crawl emits is also written, under the crawler's
     #: name; the caller owns it — opens and closes it — and may share it.
@@ -179,13 +181,15 @@ class Crawl:
     async def run(self) -> Stats:
         """Run the crawl with ``concurrency`` workers; return its ``Stats``.
 
-        The first error collected while handling requests is re-raised once all
-        workers have finished, so one bad page neither kills a worker nor passes
-        silently; see ``errors`` for the rest.
+        A failed request neither kills a worker nor passes silently: it is
+        collected in ``errors``. Up to ``max_errors`` of them the crawl carries
+        on and returns its stats; one more stops it, and the first failure is
+        raised once the workers have finished.
         """
         crawler = self.crawler
         params = crawler.ctx.params
         limit = read_max_requests(params, crawler.settings.max_requests)
+        error_limit = read_max_errors(params, crawler.settings.max_errors)
 
         self.stats.started_at = time.monotonic()
         # Before start_requests(), not inside the try/finally below: if this
@@ -197,7 +201,9 @@ class Crawl:
             self._enqueue(req, queue)
 
         n_workers = worker_count(params, crawler.settings.concurrency)
-        workers = [asyncio.create_task(self._worker(queue, limit)) for _ in range(n_workers)]
+        workers = [
+            asyncio.create_task(self._worker(queue, limit, error_limit)) for _ in range(n_workers)
+        ]
         flush_error: Exception | None = None
         try:
             await queue.join()
@@ -232,10 +238,15 @@ class Crawl:
                 # __init__ still needs it closed even when the crawl fails.
                 await crawler.closed(self.stats)
 
-        if self.errors:
+        if error_limit is not None and self.stats.errors > error_limit:
+            first = self.errors[0][1]
+            first.add_note(
+                f'crawl stopped after {self.stats.errors} failed requests '
+                f'(max_errors={error_limit})'
+            )
             if flush_error is not None:
-                self.errors[0][1].add_note(f'and flushing the dataset failed: {flush_error!r}')
-            raise self.errors[0][1]
+                first.add_note(f'and flushing the dataset failed: {flush_error!r}')
+            raise first
         if flush_error is not None:
             raise flush_error
         return self.stats
@@ -256,10 +267,16 @@ class Crawl:
             self._seen.add(key)
         queue.put_nowait(req)
 
-    async def _worker(self, queue: asyncio.Queue[Request], limit: int | None) -> None:
+    async def _worker(
+        self, queue: asyncio.Queue[Request], limit: int | None, error_limit: int | None
+    ) -> None:
         while True:
             req = await queue.get()
             try:
+                if self.stats.reason == 'max_errors':
+                    # Stopped for failures: drain without sending, as below, and
+                    # before it, so reaching max_requests cannot overwrite why.
+                    continue
                 if limit is not None and self.stats.requests >= limit:
                     # Reached the cap: drain what is queued without sending it,
                     # so queue.join() still finishes and the crawl ends cleanly.
@@ -278,6 +295,12 @@ class Crawl:
                 logger.warning('crawl.error %s %s %r', req.method, req.url, exc)
                 self.stats.errors += 1
                 self.errors.append((req, exc))
+                if error_limit is not None and self.stats.errors > error_limit:
+                    # One failure past what this crawl tolerates: stop sending.
+                    # Before on_error, not after — a hook that awaits would let
+                    # the other workers take and send more in the meantime.
+                    # Requests they already took still go out.
+                    self.stats.reason = 'max_errors'
                 try:
                     await self.crawler.on_error(req, exc)
                 except Exception:  # noqa: BLE001 — a broken hook must not also kill the worker

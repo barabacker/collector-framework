@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import asyncio
+from dataclasses import replace
 from typing import Any
 
 import pytest
@@ -146,8 +147,15 @@ def test_a_failed_crawl_carries_its_crawl_out_on_the_exception(monkeypatch):
     """run() re-raises one error; the other two must not vanish with the frame."""
     _patch_client(monkeypatch)
 
+    # All three requests must be sent and fail, so this crawl tolerates all but
+    # the last one — the default max_errors=0 would otherwise stop it after
+    # the first, and unlimited tolerance would let it succeed instead of
+    # raising the CrawlError this test checks for.
+    class _Tolerant(_AlwaysFails):
+        settings = replace(_AlwaysFails.settings, max_errors=2)
+
     with pytest.raises(CrawlError) as excinfo:
-        run_crawler(_AlwaysFails)
+        run_crawler(_Tolerant)
 
     crawl = excinfo.value.crawl
     assert len(crawl.errors) == 3
@@ -230,8 +238,13 @@ async def test_open_crawl_stops_a_crawl_a_consumer_walked_away_from(monkeypatch)
 async def test_open_crawl_attaches_the_crawl_to_a_failure(monkeypatch):
     _patch_client(monkeypatch)
 
+    # Tolerate all but the last failure, so all three requests are sent and
+    # fail (what this test checks) and the crawl still ends by raising.
+    class _Tolerant(_AlwaysFails):
+        settings = replace(_AlwaysFails.settings, max_errors=2)
+
     with pytest.raises(CrawlError) as excinfo:
-        async with open_crawl(_AlwaysFails) as crawl:
+        async with open_crawl(_Tolerant) as crawl:
             await crawl.run()
 
     assert excinfo.value.crawl is crawl

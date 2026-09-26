@@ -82,6 +82,11 @@ class Settings:
     dedupe: bool = True
 
     # ── policy and hooks ────────────────────────────────────────────────────
+    #: Failed requests this crawl tolerates. Up to this many, it carries on and
+    #: succeeds with the failures in ``crawl.errors``; one more stops it
+    #: (``stats.reason == 'max_errors'``) and fails it. ``0`` — the first
+    #: failure — by default; ``None`` never stops or fails on failed requests.
+    max_errors: int | None = 0
     retry: RetryPolicy = RetryPolicy()
     #: A tuple works, but so does a list — a single-item tuple's trailing
     #: comma is easy to forget. ``build_http_client`` only ever iterates these.

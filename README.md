@@ -48,16 +48,16 @@ browser impersonation via `curl_cffi` for sites that fingerprint TLS.
   succeeded, the same rule `async with` follows.
 - **`Crawl`** — the engine, and what running a crawler gives back. It owns the
   queue and the `concurrency` workers, collects per-request errors instead of
-  killing a worker, re-raises the first at the end, and carries `stats`,
-  `errors` and the `crawler` itself once the run is over. Through
-  `run_crawler()` / `crawl()` / `collect()` / `open_crawl()`, that failure
-  arrives as a `CrawlError` — the crawl on `.crawl`, the original failure
-  chained as `.__cause__`.
+  killing a worker, and carries on up to `Settings.max_errors` of them before
+  stopping and raising the first; it carries `stats`, `errors` and the
+  `crawler` itself once the run is over. Through `run_crawler()` / `crawl()` /
+  `collect()` / `open_crawl()`, that failure arrives as a `CrawlError` — the
+  crawl on `.crawl`, the original failure chained as `.__cause__`.
 - **`max_requests`** — a safety valve. Without a ceiling, a bug in pagination
   crawls forever with nothing to stop it; on reaching it the crawl ends
   cleanly with `stats.reason == 'max_requests'`.
 - **`on_error(request, exc)`** — an optional hook run when a request fails.
-  The framework still collects it and re-raises the first at the end either
+  The framework still collects it and applies its `max_errors` policy either
   way; this is for reacting (a metric, a note), not for changing what
   happens next. A broken override is logged, not left to take the worker
   down with it.
@@ -120,6 +120,12 @@ async with open_crawl(Quotes) as crawl:
   does, is several requests. `Request(dont_filter=True)` sends one anyway,
   `Request(unique_key=...)` sets the key, `Settings(dedupe=False)` turns it off,
   and `stats.duplicates` counts what was dropped. Keys live for one crawl.
+- **Error policy** — `Settings(max_errors=N)`: up to N failed requests a crawl
+  carries on and succeeds, the failures in `crawl.errors` and `stats.errors`;
+  one more stops it (`stats.reason == 'max_errors'`) and fails it. Nothing new
+  is sent after that, though requests other workers already took — including
+  ones waiting out `delay` — still go out. `0` by default — the first failure — and `None` for no limit; a run
+  can override it with `params={'max_errors': '20'}`.
 - **Storage** — pass `dataset=` to any entry point (`crawl_many` included) and
   every item the crawl emits is also written there, under the crawler's name.
   `MemoryDataset` keeps them in a list; `SqliteDataset('run.db')` in a file you

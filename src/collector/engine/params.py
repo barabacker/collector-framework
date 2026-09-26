@@ -4,10 +4,11 @@ Params arrive as strings (a CLI flag, a job payload, a form field), so each
 reader is forgiving: unset or unparsable falls back to the default and is
 logged rather than raised — a bad knob should not kill a crawl.
 
-Only the two knobs :class:`~collector.engine.crawl.Crawl` actually honours live
-here. A crawler's own knobs are declared on ``Crawler.params`` and converted
-by :mod:`collector.crawler.params`, strictly; a helper in this package would
-only promise a name the engine does not know.
+Only the three knobs :class:`~collector.engine.crawl.Crawl` actually honours
+live here: ``concurrency``, ``max_requests`` and ``max_errors``. A crawler's
+own knobs are declared on ``Crawler.params`` and converted by
+:mod:`collector.crawler.params`, strictly; a helper in this package would only
+promise a name the engine does not know.
 """
 
 from __future__ import annotations
@@ -63,3 +64,24 @@ def read_max_requests(params: Mapping[str, Any], default: int | None) -> int | N
         logger.warning('params.bad_max_requests value=%s', raw)
         return default
     return value if value > 0 else default
+
+
+def read_max_errors(params: Mapping[str, Any], default: int | None) -> int | None:
+    """Read ``max_errors`` from the params. ``None`` means no limit.
+
+    Falls back to ``default`` (the crawler's ``Settings``) when unset or
+    invalid. Zero is valid — no failure tolerated — and only a negative number
+    is treated as invalid.
+    """
+    raw = params.get('max_errors')
+    if raw is None or raw == '':
+        return default
+    try:
+        value = int(raw)
+    except (ValueError, TypeError):
+        logger.warning('params.bad_max_errors value=%s', raw)
+        return default
+    if value < 0:
+        logger.warning('params.bad_max_errors value=%s', raw)
+        return default
+    return value

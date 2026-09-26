@@ -24,7 +24,7 @@ from typing import Any
 
 #: Keys the engine reads out of the same mapping. Always accepted, and never a
 #: crawler's field — the two would silently share one value.
-ENGINE_KEYS = frozenset({'concurrency', 'max_requests'})
+ENGINE_KEYS = frozenset({'concurrency', 'max_requests', 'max_errors'})
 
 _TRUE = frozenset({'true', '1', 'yes'})
 _FALSE = frozenset({'false', '0', 'no'})

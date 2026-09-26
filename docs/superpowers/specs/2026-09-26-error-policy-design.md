@@ -56,7 +56,7 @@ name.
 
 ### Stopping
 
-In `Crawl._worker`, after a failure is recorded (and `on_error` has run): if
+In `Crawl._worker`, as soon as a failure is recorded — before `on_error` runs, so a hook that awaits cannot let other workers send more meanwhile: if
 the limit is not `None` and `stats.errors > limit`, the crawl is marked
 stopped with `stats.reason = 'max_errors'`. From then on the workers drain the
 queue without sending — exactly as they do on reaching `max_requests` — so
