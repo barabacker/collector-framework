@@ -89,8 +89,9 @@ class Crawl:
 
     crawler: Crawler
     stats: Stats = field(default_factory=Stats)
-    #: Every request that failed, paired with its exception. ``run()`` re-raises
-    #: the first, but a crawl that survived twenty failures should show twenty.
+    #: Every request that failed, paired with its exception, up to and past
+    #: ``max_errors``. A crawl that survived twenty failures shows all twenty
+    #: here even though ``run()`` never raises for it.
     errors: list[tuple[Request, Exception]] = field(default_factory=list)
     #: Where every item this crawl emits is also written, under the crawler's
     #: name; the caller owns it — opens and closes it — and may share it.

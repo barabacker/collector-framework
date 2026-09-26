@@ -8,6 +8,10 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Added
 
+- `Settings.max_errors` (default `0`), overridable per run with
+  `params['max_errors']`: up to that many failed requests a crawl carries on
+  and succeeds with them in `crawl.errors`; one more stops it — nothing further
+  is sent, `stats.reason == 'max_errors'` — and fails it. `None` for no limit.
 - `collector.storage`: `Dataset` — append-only, each item tagged with the
   crawler that emitted it, `push_data` / `iterate_items(crawler=)` / `flush` /
   `close`, and `export_to()` for `.json`, `.jsonl` and `.csv` — with
@@ -77,6 +81,10 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Changed
 
+- **Behaviour change:** a crawl no longer runs to the end and then fails
+  because some request failed. With the default `max_errors=0` it stops at the
+  first failure without sending the rest; a crawler that should survive bad
+  pages sets `max_errors`, and `max_errors=None` never stops or fails on them.
 - **Behaviour change:** a crawl no longer sends a request it has already
   queued in the same run; the repeat is dropped and counted in
   `stats.duplicates`. `Settings(dedupe=False)` restores the old behaviour for a

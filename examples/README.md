@@ -16,7 +16,7 @@ uv run python examples/quotes.py
 | [`many.py`](many.py) | `crawl_many()`: several crawlers at once, capped, each one's items consumed on their own and an outcome per crawler as it finishes. |
 | [`pipeline.py`](pipeline.py) | `process_item()` and `sink`: writing items somewhere, and reading the run's own counters back off `crawl.crawler`. |
 | [`storage.py`](storage.py) | `dataset=`: every item a crawl emits kept in a `SqliteDataset` you can query mid-crawl, then exported to CSV. |
-| [`errors.py`](errors.py) | A bad page is collected, not fatal — and every failure leaves on a `CrawlError` as `exc.crawl.errors`. |
+| [`errors.py`](errors.py) | `max_errors`: the first failure stops a crawl by default; a tolerance lets one with bad pages succeed — and every failure leaves on `crawl.errors`, or on a `CrawlError` as `exc.crawl.errors`. |
 | [`hooks.py`](hooks.py) | Request and response hooks, including one that answers a 401 by authenticating the session and asking again. |
 | [`tuning.py`](tuning.py) | `Settings`: pacing, concurrency, limits and retries, and how a run's `params` override two of them. |
 

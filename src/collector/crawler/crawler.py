@@ -149,10 +149,10 @@ class Crawler(ABC):
     async def on_error(self, request: Request, exc: Exception) -> None:  # noqa: B027 — optional hook
         """Run when a request fails. A no-op here; override to observe it.
 
-        The framework still collects the failure in ``errors`` and re-raises
-        the first one at the end whether or not this is overridden — this is
-        for reacting (a metric, a note), not for changing what happens next.
-        A broken override is logged and otherwise ignored, so it cannot take
+        The framework still collects the failure in ``errors`` and applies its
+        ``max_errors`` policy whether or not this is overridden — this is for
+        reacting (a metric, a note), not for changing what happens next. A
+        broken override is logged and otherwise ignored, so it cannot take
         down the worker that called it.
         """
 
