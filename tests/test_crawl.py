@@ -11,6 +11,7 @@ import pytest
 from tests.conftest import FakeHttp
 
 from collector import Crawl, Crawler, Request
+from collector.storage import MemoryDataset
 
 PAGE_1 = 'https://example.test/p1'
 PAGE_2 = 'https://example.test/p2'
@@ -769,3 +770,57 @@ async def test_a_request_sent_with_dont_filter_still_counts_as_seen(ctx_factory)
 
     assert [url for _, url in http.calls].count(PAGE_2) == 1
     assert stats.duplicates == 1
+
+
+# ── datasets ─────────────────────────────────────────────────────────────────
+
+
+async def test_a_crawl_stores_every_item_under_the_crawlers_name(ctx_factory):
+    dataset = MemoryDataset()
+    ctx, _ = ctx_factory(FakeHttp())
+
+    await Crawl(_TwoPages(ctx), dataset=dataset).run()
+
+    stored = [item['url'] async for item in dataset.iterate_items(crawler='two_pages')]
+    assert stored == [PAGE_1, PAGE_2]
+
+
+async def test_the_dataset_is_flushed_once_when_the_crawl_ends(ctx_factory):
+    class _Counting(MemoryDataset):
+        flushes = 0
+
+        async def flush(self) -> None:
+            self.flushes += 1
+
+    dataset = _Counting()
+    ctx, _ = ctx_factory(FakeHttp())
+
+    await Crawl(_TwoPages(ctx), dataset=dataset).run()
+
+    assert dataset.flushes == 1
+
+
+async def test_a_dataset_that_refuses_an_item_fails_that_request(ctx_factory):
+    class _Full(MemoryDataset):
+        async def push_data(self, item: Any, *, crawler: str) -> None:
+            raise OSError('disk full')
+
+    ctx, _ = ctx_factory(FakeHttp())
+    crawl = Crawl(_TwoPages(ctx), dataset=_Full())
+
+    with pytest.raises(OSError, match='disk full'):
+        await crawl.run()
+
+    # Page 1's item fails before its callback gets to the link to page 2, so
+    # one request, one failure.
+    assert len(crawl.errors) == 1
+
+
+async def test_a_streamed_crawl_stores_the_items_it_streams(ctx_factory):
+    dataset = MemoryDataset()
+    ctx, _ = ctx_factory(FakeHttp())
+    crawl = Crawl(_TwoPages(ctx), dataset=dataset)
+
+    streamed = [item async for item in crawl.stream()]
+
+    assert streamed == [item async for item in dataset.iterate_items()]

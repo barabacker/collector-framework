@@ -22,6 +22,7 @@ from collector.engine.params import read_max_requests, worker_count
 
 if TYPE_CHECKING:
     from collector.crawler.crawler import Crawler
+    from collector.storage.base import Dataset
 
 logger = logging.getLogger(__name__)
 
@@ -89,6 +90,9 @@ class Crawl:
     #: Every request that failed, paired with its exception. ``run()`` re-raises
     #: the first, but a crawl that survived twenty failures should show twenty.
     errors: list[tuple[Request, Exception]] = field(default_factory=list)
+    #: Where every item this crawl emits is also written, under the crawler's
+    #: name; the caller owns it — opens and closes it — and may share it.
+    dataset: Dataset | None = None
     #: Keys of the requests this run has queued, for ``Settings.dedupe``.
     _seen: set[str] = field(default_factory=set, init=False, repr=False)
     #: Set only while ``stream()`` is iterating: the channel workers hand items
@@ -210,10 +214,16 @@ class Crawl:
             with contextlib.suppress(asyncio.CancelledError):
                 await asyncio.gather(*workers, return_exceptions=True)
             self.stats.finished_at = time.monotonic()
-            # Always, regardless of how the crawl ended, and before errors are
-            # raised below — a crawler that opened something in __init__ still
-            # needs it closed even when the crawl itself is about to fail.
-            await crawler.closed(self.stats)
+            try:
+                if self.dataset is not None:
+                    # A batch still buffered is written even by a caller that
+                    # never closes the dataset — the engine does not own it.
+                    await self.dataset.flush()
+            finally:
+                # Always, regardless of how the crawl ended, and before errors
+                # are raised below — a crawler that opened something in
+                # __init__ still needs it closed even when the crawl fails.
+                await crawler.closed(self.stats)
 
         if self.errors:
             raise self.errors[0][1]
@@ -277,6 +287,8 @@ class Crawl:
                 # forgets super() must not silently corrupt the crawl's count.
                 self.stats.items += 1
                 await crawler.process_item(result)
+                if self.dataset is not None:
+                    await self.dataset.push_data(result, crawler=crawler.name)
                 if self._out is not None:
                     # Bounded: this is where a slow stream consumer stops us.
                     await self._out.put(result)
