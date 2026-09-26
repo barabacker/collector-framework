@@ -46,8 +46,9 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   converted from strings (`str`, `int`, `float`, `bool`, `date`, `datetime`,
   and `X | None`) or taken as already typed; a bad value or an unknown name
   raises `ValueError` from `open_crawl()` before any HTTP client is built, and
-  a field of an unsupported type or named `concurrency` / `max_requests` raises
-  `TypeError` when the class is defined. A crawler that declares nothing keeps
+  a field of an unsupported type, or named after an engine knob
+  (`concurrency`, `max_requests`, `max_errors`), raises `TypeError` when the
+  class is defined. A crawler that declares nothing keeps
   free-form `params`, as before.
 - `Response.form_request(form=, formdata=, click=)` — the `Request` a browser
   would send submitting a form on the page: its successful controls collected

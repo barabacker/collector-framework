@@ -82,9 +82,9 @@ class Crawl:
 
     An item reaches its consumer three ways: the crawler's own
     ``process_item()`` pushes it, a ``dataset`` given to the run stores it, and
-    ``stream()`` pulls it. A caller who wants
-    the items without writing an async loop keeps them on the crawler and reads
-    them back off ``crawl.crawler`` when the run is over.
+    ``stream()`` pulls it. A caller who wants the items without writing an async
+    loop keeps them on the crawler and reads them back off ``crawl.crawler`` when
+    the run is over.
     """
 
     crawler: Crawler
@@ -159,7 +159,8 @@ class Crawl:
                 while not out.empty():
                     yield out.get_nowait()
 
-                # Re-raises the first error, or returns the stats we ignore here.
+                # Raises the first error if the crawl failed, or returns the
+                # stats, which we ignore here.
                 await run_task
                 return
         finally:
@@ -204,7 +205,6 @@ class Crawl:
         workers = [
             asyncio.create_task(self._worker(queue, limit, error_limit)) for _ in range(n_workers)
         ]
-        flush_error: Exception | None = None
         try:
             await queue.join()
         except asyncio.CancelledError:
@@ -222,23 +222,10 @@ class Crawl:
             with contextlib.suppress(asyncio.CancelledError):
                 await asyncio.gather(*workers, return_exceptions=True)
             self.stats.finished_at = time.monotonic()
-            try:
-                if self.dataset is not None:
-                    # A batch still buffered is written even by a caller that
-                    # never closes the dataset — the engine does not own it.
-                    await self.dataset.flush()
-            except Exception as exc:  # noqa: BLE001 — decided below, not here
-                # Not raised from a finally: it would replace a cancellation, or
-                # the request error the crawl is about to report.
-                logger.warning('crawl.flush_failed %r', exc)
-                flush_error = exc
-            finally:
-                # Always, regardless of how the crawl ended, and before errors
-                # are raised below — a crawler that opened something in
-                # __init__ still needs it closed even when the crawl fails.
-                await crawler.closed(self.stats)
+            flush_error = await self._finish()
 
-        if error_limit is not None and self.stats.errors > error_limit:
+        # The worker records the stop as it happens; one source for "failed".
+        if self.stats.reason == 'max_errors':
             first = self.errors[0][1]
             first.add_note(
                 f'crawl stopped after {self.stats.errors} failed requests '
@@ -250,6 +237,27 @@ class Crawl:
         if flush_error is not None:
             raise flush_error
         return self.stats
+
+    async def _finish(self) -> Exception | None:
+        """Flush the dataset and close the crawler, however the crawl ended.
+
+        A flush failure is returned, not raised: raised from ``run()``'s
+        ``finally`` it would replace a cancellation, or the request error the
+        crawl is about to report. ``closed()`` runs either way.
+        """
+        try:
+            if self.dataset is not None:
+                # A batch still buffered is written even by a caller that never
+                # closes the dataset — the engine does not own it.
+                await self.dataset.flush()
+        except Exception as exc:  # noqa: BLE001 — run() decides what it means
+            logger.warning('crawl.flush_failed %r', exc)
+            return exc
+        finally:
+            # Before any error is raised — a crawler that opened something in
+            # __init__ still needs it closed even when the crawl fails.
+            await self.crawler.closed(self.stats)
+        return None
 
     def _enqueue(self, req: Request, queue: asyncio.Queue[Request]) -> None:
         """Queue a request unless this crawl has already queued one with its key.

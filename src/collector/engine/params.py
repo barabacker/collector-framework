@@ -15,9 +15,37 @@ from __future__ import annotations
 
 import logging
 from collections.abc import Mapping
-from typing import Any
+from typing import Any, TypeVar
 
 logger = logging.getLogger(__name__)
+
+
+#: What a reader falls back to: an ``int``, or ``None`` for "no limit".
+_Default = TypeVar('_Default', int, int | None)
+
+
+def _read_int(
+    params: Mapping[str, Any], key: str, default: _Default, *, minimum: int, log_below: bool
+) -> _Default:
+    """Read one integer knob: unset keeps ``default``, junk logs and keeps it too.
+
+    A value below ``minimum`` also keeps the default; ``log_below`` says whether
+    that is worth a warning (a negative ``max_errors`` is plainly a mistake)
+    or not (a zero ``concurrency`` has always fallen back quietly).
+    """
+    raw = params.get(key)
+    if raw is None or raw == '':
+        return default
+    try:
+        value = int(raw)
+    except (ValueError, TypeError):
+        logger.warning('params.bad_%s value=%s', key, raw)
+        return default
+    if value < minimum:
+        if log_below:
+            logger.warning('params.bad_%s value=%s', key, raw)
+        return default
+    return value
 
 
 def read_concurrency(params: Mapping[str, Any], default: int) -> int:
@@ -26,15 +54,7 @@ def read_concurrency(params: Mapping[str, Any], default: int) -> int:
     Falls back to ``default`` (the crawler's ClassVar) when unset or invalid; a
     non-positive value is treated as invalid.
     """
-    raw = params.get('concurrency')
-    if raw is None or raw == '':
-        return default
-    try:
-        value = int(raw)
-    except (ValueError, TypeError):
-        logger.warning('params.bad_concurrency value=%s', raw)
-        return default
-    return value if value > 0 else default
+    return _read_int(params, 'concurrency', default, minimum=1, log_below=False)
 
 
 def worker_count(params: Mapping[str, Any], default: int) -> int:
@@ -55,15 +75,7 @@ def read_max_requests(params: Mapping[str, Any], default: int | None) -> int | N
     Falls back to ``default`` (the crawler's ``Settings``) when unset or
     invalid; a non-positive value is treated as invalid.
     """
-    raw = params.get('max_requests')
-    if raw is None or raw == '':
-        return default
-    try:
-        value = int(raw)
-    except (ValueError, TypeError):
-        logger.warning('params.bad_max_requests value=%s', raw)
-        return default
-    return value if value > 0 else default
+    return _read_int(params, 'max_requests', default, minimum=1, log_below=False)
 
 
 def read_max_errors(params: Mapping[str, Any], default: int | None) -> int | None:
@@ -73,15 +85,4 @@ def read_max_errors(params: Mapping[str, Any], default: int | None) -> int | Non
     invalid. Zero is valid — no failure tolerated — and only a negative number
     is treated as invalid.
     """
-    raw = params.get('max_errors')
-    if raw is None or raw == '':
-        return default
-    try:
-        value = int(raw)
-    except (ValueError, TypeError):
-        logger.warning('params.bad_max_errors value=%s', raw)
-        return default
-    if value < 0:
-        logger.warning('params.bad_max_errors value=%s', raw)
-        return default
-    return value
+    return _read_int(params, 'max_errors', default, minimum=0, log_below=True)

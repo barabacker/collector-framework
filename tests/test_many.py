@@ -10,7 +10,7 @@ from datetime import date
 from typing import Any
 
 import pytest
-from tests.conftest import SessionHttp
+from tests.conftest import SessionHttp, items_of
 
 from collector import Crawl, Crawler, Outcome, Settings, crawl_many
 from collector.storage import MemoryDataset
@@ -261,8 +261,8 @@ async def test_one_dataset_keeps_each_crawlers_items_apart(monkeypatch):
 
     await drain([_crawler('a'), _crawler('b')], dataset=dataset)
 
-    assert [item async for item in dataset.iterate_items(crawler='a')] == [{'site': 'a'}]
-    assert [item async for item in dataset.iterate_items(crawler='b')] == [{'site': 'b'}]
+    assert await items_of(dataset, crawler='a') == [{'site': 'a'}]
+    assert await items_of(dataset, crawler='b') == [{'site': 'b'}]
 
 
 async def test_a_crawler_within_its_tolerance_has_no_error(monkeypatch):

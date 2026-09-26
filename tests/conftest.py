@@ -52,6 +52,11 @@ class SessionHttp(FakeHttp):
         return None
 
 
+async def items_of(dataset: Any, **kwargs: Any) -> list[Any]:
+    """Everything a dataset holds, as a list: what almost every storage assertion reads."""
+    return [item async for item in dataset.iterate_items(**kwargs)]
+
+
 @pytest.fixture
 def ctx_factory():
     """Build a CrawlerContext around a FakeHttp, capturing log lines."""

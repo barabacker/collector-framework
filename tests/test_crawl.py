@@ -8,7 +8,7 @@ from dataclasses import replace
 from typing import Any
 
 import pytest
-from tests.conftest import FakeHttp
+from tests.conftest import FakeHttp, items_of
 
 from collector import Crawl, Crawler, Request
 from collector.storage import MemoryDataset
@@ -795,7 +795,7 @@ async def test_a_crawl_stores_every_item_under_the_crawlers_name(ctx_factory):
 
     await Crawl(_TwoPages(ctx), dataset=dataset).run()
 
-    stored = [item['url'] async for item in dataset.iterate_items(crawler='two_pages')]
+    stored = [item['url'] for item in await items_of(dataset, crawler='two_pages')]
     assert stored == [PAGE_1, PAGE_2]
 
 
@@ -837,7 +837,7 @@ async def test_a_streamed_crawl_stores_the_items_it_streams(ctx_factory):
 
     streamed = [item async for item in crawl.stream()]
 
-    assert streamed == [item async for item in dataset.iterate_items()]
+    assert streamed == await items_of(dataset)
 
 
 class _BrokenFlush(MemoryDataset):
