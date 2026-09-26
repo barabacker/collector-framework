@@ -5,9 +5,10 @@ talks to a site, so a caller never carries the site's quirks. A subclass narrows
 its parent's with ``dataclasses.replace`` — the fields it does not name keep the
 parent's values.
 
-Two of those knobs can also be overridden per run, through ``params``: strings
-from a CLI flag or a job payload, where a bad value falls back to what the
-crawler declared rather than killing the crawl.
+Three of those knobs — ``concurrency``, ``max_requests`` and ``max_errors`` — can
+also be overridden per run, through ``params``: strings from a CLI flag or a job
+payload, where a bad value falls back to what the crawler declared rather than
+killing the crawl.
 
 A crawler's own knobs are declared the same way ``settings`` are — a frozen
 dataclass instance, ``params`` — and a run's values reach it typed on

@@ -159,7 +159,8 @@ class Crawl:
                 while not out.empty():
                     yield out.get_nowait()
 
-                # Re-raises the first error, or returns the stats we ignore here.
+                # Raises the first error if the crawl failed, or returns the
+                # stats, which we ignore here.
                 await run_task
                 return
         finally:

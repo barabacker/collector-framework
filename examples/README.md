@@ -18,13 +18,13 @@ uv run python examples/quotes.py
 | [`storage.py`](storage.py) | `dataset=`: every item a crawl emits kept in a `SqliteDataset` you can query mid-crawl, then exported to CSV. |
 | [`errors.py`](errors.py) | `max_errors`: the first failure stops a crawl by default; a tolerance lets one with bad pages succeed — and every failure leaves on `crawl.errors`, or on a `CrawlError` as `exc.crawl.errors`. |
 | [`hooks.py`](hooks.py) | Request and response hooks, including one that answers a 401 by authenticating the session and asking again. |
-| [`tuning.py`](tuning.py) | `Settings`: pacing, concurrency, limits and retries, and how a run's `params` override two of them. |
+| [`tuning.py`](tuning.py) | `Settings`: pacing, concurrency, limits and retries, how a run's `params` override three of them, and a crawler's own declared `params`. |
 
 ## They use the network
 
-`quotes.py`, `json_api.py`, `forms.py`, `streaming.py`, `many.py`, `storage.py` and `pipeline.py` crawl
-[quotes.toscrape.com](https://quotes.toscrape.com/), a sandbox that exists to be
-scraped. `errors.py`, `hooks.py` and `tuning.py` use
+`quotes.py`, `json_api.py`, `forms.py`, `streaming.py`, `many.py`, `storage.py`
+and `pipeline.py` crawl [quotes.toscrape.com](https://quotes.toscrape.com/), a
+sandbox that exists to be scraped. `errors.py`, `hooks.py` and `tuning.py` use
 [mockhttp.org](https://mockhttp.org), an httpbin clone. Both are someone else's
 machines, so every example here declares a `delay` and a `max_requests` where a
 crawl could otherwise run long.
@@ -33,4 +33,5 @@ Importing one of these modules does nothing — each keeps its crawl behind
 `if __name__ == '__main__':`, which is also what lets the test suite check they
 still match the API without going near a socket.
 
-`pipeline.py` writes `quotes.jsonl`, and `storage.py` `quotes.db` and `quotes.csv`, into the working directory.
+`pipeline.py` writes `quotes.jsonl`, and `storage.py` `quotes.db` and
+`quotes.csv`, into the working directory.

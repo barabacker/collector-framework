@@ -43,8 +43,8 @@ browser impersonation via `curl_cffi` for sites that fingerprint TLS.
   `start_requests()` covers a start that a URL cannot express — a POST, or
   per-start metadata. It holds no run state of its own. `opened()` runs once
   before the crawl starts — the place for async setup `__init__` cannot do —
-  and `closed(stats)` runs once it is over (cleanly, on `max_requests`,
-  cancelled or failed) to release it again; `closed()` only runs if `opened()`
+  and `closed(stats)` runs once it is over (cleanly, on `max_requests` or
+  `max_errors`, cancelled or failed) to release it again; `closed()` only runs if `opened()`
   succeeded, the same rule `async with` follows.
 - **`Crawl`** — the engine, and what running a crawler gives back. It owns the
   queue and the `concurrency` workers, collects per-request errors instead of
@@ -98,21 +98,23 @@ async with open_crawl(Quotes) as crawl:
     print(crawl.stats)
 ```
 
-- **Params** — a run's `params` may override `concurrency` and `max_requests`
-  without touching the crawler. They arrive as strings from a CLI flag or a job
-  payload, so a bad value for those two falls back to what the crawler declared
-  and is logged, rather than killing the crawl. A crawler's own knobs — a page
+- **Params** — a run's `params` may override `concurrency`, `max_requests` and
+  `max_errors` without touching the crawler. They arrive as strings from a CLI
+  flag or a job payload, so a bad value for those three falls back to what the
+  crawler declared and is logged, rather than killing the crawl. A crawler's own knobs — a page
   limit, a date window — are declared as `params`, a frozen dataclass instance
   like `settings`, and read typed from `self.params`; a run's values for those
   are converted from strings and checked before the first request, so a bad
   value or an unknown name fails the run up front.
-- **Many crawlers** — `crawl_many(crawlers, concurrency=, params=, consume=,
-  log=)` runs a set of crawlers at once, each through `open_crawl()`, at most
-  `concurrency` together. `consume(crawl)` handles each crawler's items;
+- **Many crawlers** — `crawl_many(crawlers, concurrency=, params=, dataset=,
+  consume=, log=)` runs a set of crawlers at once, each through `open_crawl()`,
+  at most `concurrency` together. `consume(crawl)` handles each crawler's items;
   `log(name, message)` gets every line with the crawler's name. One crawler
   failing lands in its own `Outcome` — with its stats, and the original
   failure rather than the `CrawlError` around it — and the rest carry on;
-  outcomes arrive as crawlers finish.
+  outcomes arrive as crawlers finish. A `consume` that stops early is not a
+  failure: `outcome.error` is `None` and `outcome.crawl.stats.reason` reads
+  `'cancelled'`.
 - **De-duplication** — a crawl does not send a request it has already queued.
   Two requests are the same when their method, URL (scheme and host
   lower-cased, fragment dropped, query sorted, `params` merged in) and body
@@ -124,8 +126,9 @@ async with open_crawl(Quotes) as crawl:
   carries on and succeeds, the failures in `crawl.errors` and `stats.errors`;
   one more stops it (`stats.reason == 'max_errors'`) and fails it. Nothing new
   is sent after that, though requests other workers already took — including
-  ones waiting out `delay` — still go out. `0` by default — the first failure — and `None` for no limit; a run
-  can override it with `params={'max_errors': '20'}`.
+  ones waiting out `delay` — still go out. `0` by default — the first failure
+  — and `None` for no limit; a run can override it with
+  `params={'max_errors': '20'}`.
 - **Storage** — pass `dataset=` to any entry point (`crawl_many` included) and
   every item the crawl emits is also written there, under the crawler's name.
   `MemoryDataset` keeps them in a list; `SqliteDataset('run.db')` in a file you
@@ -138,10 +141,11 @@ async with open_crawl(Quotes) as crawl:
 
 ## Examples
 
-Nine runnable scripts in [`examples/`](examples/), each about one thing —
+Ten runnable scripts in [`examples/`](examples/), each about one thing —
 pagination, a JSON API, submitting a form, streaming with an early `break`,
-several crawlers at once, writing items to a sink, what happens when pages
-fail, hooks that solve a challenge, and the pacing knobs.
+several crawlers at once, writing items to a sink, keeping them in SQLite, how
+many failed pages a crawl tolerates, hooks that solve a challenge, and the
+pacing knobs.
 
 ```bash
 uv run python examples/quotes.py
@@ -162,7 +166,7 @@ class Saving(Quotes):
 
 
 crawl = run_crawler(Saving, sink=my_sink)
-crawl.stats  # Stats(requests=…, errors=…, items=…, reason='done')
+crawl.stats  # Stats(requests=…, errors=…, items=…, duplicates=…, reason='done')
 crawl.errors  # [(Request, Exception), …]
 crawl.crawler  # the instance, for whatever counters the app kept on it
 ```
