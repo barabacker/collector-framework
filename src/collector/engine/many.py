@@ -117,8 +117,10 @@ async def _run_one(
             crawl = exc.crawl
             error = exc.__cause__ if isinstance(exc.__cause__, Exception) else exc
         except Exception as exc:  # noqa: BLE001 — one crawler must not stop the others
-            # Raised before open_crawl() had a crawl to wrap it with.
-            crawl, error = None, exc
+            # Raised outside the crawl: building the client, or closing it. In
+            # the second case the crawl ran and ``crawl`` still holds it, stats
+            # and all; in the first it was never set.
+            error = exc
         return Outcome(crawler_cls, crawl, error, time.monotonic() - started)
 
 

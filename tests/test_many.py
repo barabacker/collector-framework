@@ -212,10 +212,28 @@ class _Dated(Crawler):
 async def test_bad_params_for_one_crawler_stop_the_run_before_anything_is_built(monkeypatch):
     built = _patch_client(monkeypatch)
 
-    with pytest.raises(ValueError, match=r"_Dated: params\['since'\]"):
+    with pytest.raises(ValueError, match=r"_Dated: params\['since'\]") as info:
         await drain([_crawler('free'), _Dated], params={'since': 'someday'})
 
     assert built == []
+    # The resolver's own error rides along, for whoever wants it whole.
+    assert isinstance(info.value.__cause__, ValueError)
+
+
+async def test_a_session_that_fails_to_close_keeps_the_crawl_that_ran(monkeypatch):
+    class _Leaky(_Http):
+        async def __aexit__(self, *exc_info: Any) -> None:
+            raise OSError('close failed')
+
+    monkeypatch.setattr(
+        'collector.engine.runner.build_http_client', lambda crawler_cls, **kwargs: _Leaky()
+    )
+
+    [outcome] = await drain([_crawler('leaky')])
+
+    assert isinstance(outcome.error, OSError)
+    assert outcome.crawl is not None
+    assert outcome.crawl.stats.items == 1
 
 
 # ── leaving early ────────────────────────────────────────────────────────────
