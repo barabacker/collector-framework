@@ -2,12 +2,14 @@
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field, replace
 from datetime import date, datetime
 from typing import Any
 
 import pytest
+from tests.conftest import FakeHttp
 
+from collector import Crawler, CrawlerContext
 from collector.crawler.params import resolve_params
 
 
@@ -109,3 +111,101 @@ def test_an_unknown_key_is_an_error_listing_the_known_ones():
 def test_nothing_declared_means_nothing_is_checked():
     raw: dict[str, Any] = {'anything': 'at all'}
     assert resolve_params(None, raw) is None
+
+
+# ── on a crawler ─────────────────────────────────────────────────────────────
+
+
+class Paged(Crawler):
+    name = 'paged'
+    params = Knobs()
+
+    async def parse(self, response: Any):
+        yield {}
+
+
+class Small(Paged):
+    name = 'small'
+    params = replace(Paged.params, pages=5)
+
+
+class Free(Crawler):
+    name = 'free'
+
+    async def parse(self, response: Any):
+        yield {}
+
+
+def build(crawler_cls: type[Crawler], **params: Any) -> Crawler:
+    return crawler_cls(CrawlerContext(http=FakeHttp(), params=params))
+
+
+def test_a_crawler_reads_the_runs_values_typed():
+    assert build(Paged, pages='3', since='2026-06-01').params == Knobs(
+        pages=3, since=date(2026, 6, 1)
+    )
+
+
+def test_the_declaration_is_not_changed_by_a_run():
+    build(Paged, pages='3')
+    assert Paged.params == Knobs()
+
+
+def test_a_subclass_narrows_the_defaults_with_replace():
+    assert build(Small).params == Knobs(pages=5)
+    assert build(Small, label='x').params == Knobs(pages=5, label='x')
+
+
+def test_a_bad_value_fails_when_the_crawler_is_built():
+    with pytest.raises(ValueError, match='pages'):
+        build(Paged, pages='lots')
+
+
+def test_a_crawler_without_a_declaration_keeps_free_form_params():
+    crawler = build(Free, anything='at all')
+    assert crawler.params is None
+    assert crawler.ctx.params == {'anything': 'at all'}
+
+
+# ── declaring ────────────────────────────────────────────────────────────────
+
+
+def _define(declared: Any) -> type[Crawler]:
+    class Declared(Crawler):
+        name = 'declared'
+        params = declared
+
+        async def parse(self, response: Any):
+            yield {}
+
+    return Declared
+
+
+@pytest.mark.parametrize('declared', [{'pages': 1}, Knobs], ids=['dict', 'class'])
+def test_params_must_be_a_dataclass_instance(declared):
+    with pytest.raises(TypeError, match='dataclass instance'):
+        _define(declared)
+
+
+@dataclass(frozen=True)
+class Listed:
+    tags: list[str] = field(default_factory=list)
+
+
+@dataclass(frozen=True)
+class Either:
+    size: int | str = 1
+
+
+@dataclass(frozen=True)
+class Reserved:
+    concurrency: int = 1
+
+
+@pytest.mark.parametrize(
+    ('declared', 'message'),
+    [(Listed(), 'tags'), (Either(), 'size'), (Reserved(), 'reserved')],
+)
+def test_a_field_a_run_could_never_set_is_refused_when_the_class_is_defined(declared, message):
+    with pytest.raises(TypeError, match=message):
+        _define(declared)
