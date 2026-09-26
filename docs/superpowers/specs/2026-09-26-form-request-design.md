@@ -94,7 +94,9 @@ and repeated names are legal in HTML and a dict would drop all but one.
 
 `click="name"` finds a submit control inside the form — `input` of type
 `submit` or `image`, or a `button` whose type is `submit` or absent — with that
-`name`, and appends its `(name, value)` after the overrides. A name that
+`name`, and appends its `(name, value)` after the overrides — or, for an
+image input, `(name.x, '0')` and `(name.y, '0')`, the click coordinates a
+browser sends and ASP.NET looks for. A name that
 matches no such control raises `ValueError`: overriding a missing field is
 normal, but pressing a missing button is almost certainly a typo, and posting
 without it would fail quietly on the server side.
@@ -103,7 +105,8 @@ without it would fail quietly on the server side.
 
 - URL: the form's `action` resolved against the response's URL, the same way
   `urljoin()` resolves a link; an absent or empty `action` means the
-  response's own URL.
+  response's own URL. For a GET, the action's own query is dropped: a browser
+  replaces it with the form's fields.
 - Method: the form's `method`, case-insensitive; `POST` sends the fields as
   `data`, anything else sends them as a `GET` with the fields as `params`.
 

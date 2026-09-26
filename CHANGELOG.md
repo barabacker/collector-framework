@@ -8,6 +8,16 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Added
 
+- `Response.form_request(form=, formdata=, click=)` — the `Request` a browser
+  would send submitting a form on the page: its successful controls collected
+  by the browser's rules (hidden and text inputs, checked boxes, selected
+  options, textareas; nothing disabled or nameless, no buttons), `formdata`
+  laid over them (a value replaces a field in place, `None` removes it, a new
+  name is appended), and a submit button only when `click` names one. The URL
+  and method come from the form's `action` and `method`. A crawler submitting
+  an ASP.NET WebForms postback or a form with a CSRF token no longer rebuilds
+  the body by hand. The rules live in `collector.crawler.form` as a pure
+  function.
 - `Response.headers` — the response headers, alongside `status` and `text`. A
   crawler reading a rate limit or a content type had to reach into `raw`, which
   is meant for what this wrapper does not cover.
@@ -31,6 +41,11 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Changed
 
+- `Request.data` and `Request.params` — and the same parameters on
+  `Crawler.request()` and `Response.follow()` — accept a list of `(name, value)`
+  pairs as well as a dict. A form may send one name twice (a `select multiple`),
+  which a dict cannot hold; `curl_cffi` already encoded a list of pairs the same
+  way, so only the annotations change.
 - **Behaviour change:** a failed crawl now raises `CrawlError` — carrying the
   `Crawl` on `.crawl`, exactly as before — instead of re-raising the original
   exception with `.crawl` bolted onto it. The original failure is chained as

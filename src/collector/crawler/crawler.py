@@ -72,8 +72,8 @@ class Crawler(ABC):
         callback: Callable[[Response], AsyncIterator[Request | Any]] | None = None,
         metadata: dict[str, Any] | None = None,
         headers: dict[str, str] | None = None,
-        data: dict[str, str] | str | None = None,
-        params: dict[str, Any] | None = None,
+        data: dict[str, str] | list[tuple[str, str]] | str | None = None,
+        params: dict[str, Any] | list[tuple[str, Any]] | None = None,
         json: Any | None = None,
         cookies: dict[str, str] | None = None,
     ) -> Request:

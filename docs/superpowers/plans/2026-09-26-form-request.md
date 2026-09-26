@@ -83,15 +83,15 @@ with:
 In `src/collector/crawler/crawler.py`, in `Crawler.request()`, replace:
 
 ```python
-        data: dict[str, str] | str | None = None,
-        params: dict[str, Any] | None = None,
+data: dict[str, str] | str | None = (None,)
+params: dict[str, Any] | None = (None,)
 ```
 
 with:
 
 ```python
-        data: dict[str, str] | list[tuple[str, str]] | str | None = None,
-        params: dict[str, Any] | list[tuple[str, Any]] | None = None,
+data: dict[str, str] | list[tuple[str, str]] | str | None = (None,)
+params: dict[str, Any] | list[tuple[str, Any]] | None = (None,)
 ```
 
 In `src/collector/crawler/response.py`, in `Response.follow()`, make the same replacement of the `data` and `params` parameter lines.
@@ -281,7 +281,9 @@ def test_the_first_form_is_used_by_default():
 
 
 def test_a_selector_picks_the_form():
-    html = '<form><input name="a" value="1"></form><form id="second"><input name="b" value="2"></form>'
+    html = (
+        '<form><input name="a" value="1"></form><form id="second"><input name="b" value="2"></form>'
+    )
     assert fields(html, form='#second') == [('b', '2')]
 
 
@@ -523,7 +525,9 @@ def _override(
         if (override := formdata[name]) is not None:
             result.append((name, override))
     result.extend(
-        (name, value) for name, value in formdata.items() if name not in placed and value is not None
+        (name, value)
+        for name, value in formdata.items()
+        if name not in placed and value is not None
     )
     return result
 ```

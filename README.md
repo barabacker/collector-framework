@@ -76,7 +76,9 @@ browser impersonation via `curl_cffi` for sites that fingerprint TLS.
   it back on a normal one, between a floor (the declared `delay`) and a
   `ceiling` you set.
 - **Response helpers** — `status`, `text`, `headers`, `json()`, `urljoin()`,
-  `follow()` for a link on the page, and `selector()` (parsel), which parses the
+  `follow()` for a link on the page, `form_request()` to submit a form on it
+  the way a browser would (hidden fields included, nothing clicked unless
+  named), and `selector()` (parsel), which parses the
   body once however often you ask for it.
 - **Per-request transport** — a `Request` carries `headers`, `params`, `data`,
   `json` and `cookies`; what is session-wide instead (a proxy, a base header
