@@ -75,3 +75,21 @@ def test_headers_and_cookies_do_not_change_the_key():
 def test_the_new_fields_do_not_reach_the_transport():
     req = Request(url=URL, unique_key='lot-42', dont_filter=True)
     assert req.http_kwargs() == {}
+
+
+def test_a_query_escaped_in_a_legacy_encoding_keeps_its_bytes():
+    # Two different cp1251 searches must not collapse into one mangled key.
+    assert key(f'{URL}?q=%EB%EE%F2') != key(f'{URL}?q=%E0%E1%E2')
+    assert '%EB%EE%F2' in key(f'{URL}?q=%EB%EE%F2')
+
+
+def test_a_list_in_params_is_the_name_repeated():
+    assert key(URL, params={'a': [1, 2]}) == key(f'{URL}?a=1&a=2')
+
+
+def test_only_the_host_is_lower_cased_not_the_credentials():
+    assert key('HTTP://User:PaSS@Host:8080/p') == 'GET|http://User:PaSS@host:8080/p|'
+
+
+def test_a_bytes_body_is_hashed_rather_than_rejected():
+    assert key(method='POST', data=b'a=1') != key(method='POST', data=b'a=2')

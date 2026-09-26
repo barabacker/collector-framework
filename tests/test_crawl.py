@@ -767,3 +767,22 @@ async def test_duplicates_do_not_use_up_max_requests(ctx_factory):
     # Two distinct pages exactly fill the ceiling; the dropped duplicates were
     # never queued, so the crawl drained rather than hitting the limit.
     assert (stats.requests, stats.duplicates, stats.reason) == (2, 2, 'done')
+
+
+async def test_a_request_sent_with_dont_filter_still_counts_as_seen(ctx_factory):
+    class _ForcedThenPlain(Crawler):
+        name = 'forced_then_plain'
+        start_urls = [PAGE_1]
+
+        async def parse(self, response: Any):
+            if response.request.url == PAGE_1:
+                yield self.request(PAGE_2, dont_filter=True)
+                yield self.request(PAGE_2)
+
+    http = FakeHttp()
+    ctx, _ = ctx_factory(http)
+
+    stats = await Crawl(_ForcedThenPlain(ctx)).run()
+
+    assert [url for _, url in http.calls].count(PAGE_2) == 1
+    assert stats.duplicates == 1

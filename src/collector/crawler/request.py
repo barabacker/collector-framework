@@ -80,12 +80,27 @@ def request_key(request: Request) -> str:
 
 def _normalise_url(url: str, params: Any) -> str:
     parts = urlsplit(url.strip())
-    query = parse_qsl(parts.query, keep_blank_values=True)
+    # surrogateescape, not the default 'replace': a query escaped in cp1251 or
+    # latin-1 is not UTF-8, and decoding it lossily would give two different
+    # searches one key — the second silently dropped as a duplicate.
+    query = parse_qsl(parts.query, keep_blank_values=True, errors='surrogateescape')
     if params:
         pairs = params.items() if isinstance(params, Mapping) else params
-        query += [(str(name), str(value)) for name, value in pairs]
+        for name, value in pairs:
+            # Sent with doseq, as curl does: a list is the name repeated.
+            values = value if isinstance(value, list | tuple) else [value]
+            query += [(str(name), str(item)) for item in values]
+    # Only the host is case-insensitive; a user name or password is not.
+    host = (parts.hostname or '') + (f':{parts.port}' if parts.port is not None else '')
+    netloc = parts.netloc.rpartition('@')[0] + '@' + host if '@' in parts.netloc else host
     return urlunsplit(
-        (parts.scheme.lower(), parts.netloc.lower(), parts.path, urlencode(sorted(query)), '')
+        (
+            parts.scheme.lower(),
+            netloc,
+            parts.path,
+            urlencode(sorted(query), errors='surrogateescape'),
+            '',
+        )
     )
 
 
@@ -94,7 +109,11 @@ def _body_digest(data: Any, json: Any) -> str:
         return ''
     digest = hashlib.sha256()
     if data is not None:
-        if isinstance(data, str):
+        if isinstance(data, bytes | bytearray):
+            # Outside the annotation, but curl sends it, so the key must not choke on it.
+            digest.update(b'data:' + bytes(data))
+            canonical = None
+        elif isinstance(data, str):
             canonical = data
         elif isinstance(data, Mapping):
             # A dict's order is an accident of how it was built, not a
@@ -102,7 +121,8 @@ def _body_digest(data: Any, json: Any) -> str:
             canonical = repr(sorted((str(name), str(value)) for name, value in data.items()))
         else:
             canonical = repr([(str(name), str(value)) for name, value in data])
-        digest.update(b'data:' + canonical.encode())
+        if canonical is not None:
+            digest.update(b'data:' + canonical.encode())
     if json is not None:
         body = jsonlib.dumps(json, sort_keys=True, separators=(',', ':'), default=str)
         digest.update(b'json:' + body.encode())

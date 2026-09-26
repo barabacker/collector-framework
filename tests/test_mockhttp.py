@@ -463,7 +463,7 @@ async def test_break_under_open_crawl_stops_the_crawl_and_the_session() -> None:
 
     class Endless(Linked):
         start_urls = [f'{BASE}/links/8/0']
-        settings = settings(delay=0.4, request_hooks=(trips,))
+        settings = settings(delay=0.4, dedupe=False, request_hooks=(trips,))
 
     async with open_crawl(Endless) as crawl:
         async for _item in crawl.stream():
@@ -486,7 +486,7 @@ async def test_break_without_closing_the_generator_leaves_the_crawl_running() ->
 
     class Endless(Linked):
         start_urls = [f'{BASE}/links/8/0']
-        settings = settings(delay=0.3, request_hooks=(trips,))
+        settings = settings(delay=0.3, dedupe=False, request_hooks=(trips,))
 
     http = build_http_client(Endless)
     async with http:
