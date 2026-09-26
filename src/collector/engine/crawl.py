@@ -62,7 +62,7 @@ class CrawlError(Exception):
     """A crawl failed. The original failure is chained as ``__cause__``.
 
     ``crawl`` carries the stats and every failure the crawl collected, not
-    only the one that ends up here — a crawl that survived twenty bad pages
+    only the one that ends up here — a crawl stopped after twenty failures
     reports one on ``__cause__`` and all twenty on ``crawl.errors``.
     """
 
@@ -295,14 +295,16 @@ class Crawl:
                 logger.warning('crawl.error %s %s %r', req.method, req.url, exc)
                 self.stats.errors += 1
                 self.errors.append((req, exc))
+                if error_limit is not None and self.stats.errors > error_limit:
+                    # One failure past what this crawl tolerates: stop sending.
+                    # Before on_error, not after — a hook that awaits would let
+                    # the other workers take and send more in the meantime.
+                    # Requests they already took still go out.
+                    self.stats.reason = 'max_errors'
                 try:
                     await self.crawler.on_error(req, exc)
                 except Exception:  # noqa: BLE001 — a broken hook must not also kill the worker
                     logger.exception('crawl.on_error_failed %s %s', req.method, req.url)
-                if error_limit is not None and self.stats.errors > error_limit:
-                    # One failure past what this crawl tolerates: stop sending.
-                    # Requests already in flight on other workers still finish.
-                    self.stats.reason = 'max_errors'
             finally:
                 queue.task_done()
 

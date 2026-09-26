@@ -984,3 +984,31 @@ async def test_a_tolerated_crawl_still_raises_a_dataset_that_cannot_flush(ctx_fa
 
     with pytest.raises(OSError, match='disk full'):
         await Crawl(_flaky({1}, max_errors=1)(ctx), dataset=_BrokenFlush()).run()
+
+
+async def test_a_slow_on_error_does_not_let_the_crawl_keep_sending(ctx_factory):
+    class _SlowHook(_flaky({0}, concurrency=2)):
+        async def on_error(self, request: Any, exc: Exception) -> None:
+            # Long enough for the other worker to take and send several more,
+            # were the crawl only stopped once this returned.
+            await asyncio.sleep(0.05)
+
+    http = FakeHttp()
+    ctx, _ = ctx_factory(http)
+
+    with pytest.raises(ValueError):
+        await Crawl(_SlowHook(ctx)).run()
+
+    # The failing page, and at most the one the other worker already held.
+    assert len(http.calls) <= 2
+
+
+async def test_max_requests_does_not_overwrite_a_stop_for_errors(ctx_factory):
+    http = FakeHttp()
+    ctx, _ = ctx_factory(http)
+    crawl = Crawl(_flaky({0}, max_requests=2)(ctx))
+
+    with pytest.raises(ValueError):
+        await crawl.run()
+
+    assert (len(http.calls), crawl.stats.reason) == (1, 'max_errors')

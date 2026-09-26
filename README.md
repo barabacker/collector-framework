@@ -122,8 +122,9 @@ async with open_crawl(Quotes) as crawl:
   and `stats.duplicates` counts what was dropped. Keys live for one crawl.
 - **Error policy** — `Settings(max_errors=N)`: up to N failed requests a crawl
   carries on and succeeds, the failures in `crawl.errors` and `stats.errors`;
-  one more stops it (`stats.reason == 'max_errors'`, nothing further sent) and
-  fails it. `0` by default — the first failure — and `None` for no limit; a run
+  one more stops it (`stats.reason == 'max_errors'`) and fails it. Nothing new
+  is sent after that, though requests other workers already took — including
+  ones waiting out `delay` — still go out. `0` by default — the first failure — and `None` for no limit; a run
   can override it with `params={'max_errors': '20'}`.
 - **Storage** — pass `dataset=` to any entry point (`crawl_many` included) and
   every item the crawl emits is also written there, under the crawler's name.
