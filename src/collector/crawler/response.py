@@ -3,11 +3,13 @@
 from __future__ import annotations
 
 import json as jsonlib
+from collections.abc import Mapping
 from typing import TYPE_CHECKING, Any
 from urllib.parse import urljoin
 
 from parsel import Selector
 
+from collector.crawler.form import form_request as _form_request
 from collector.crawler.request import Request
 
 if TYPE_CHECKING:
@@ -98,4 +100,35 @@ class Response:
             params=params,
             json=json,
             cookies=cookies,
+        )
+
+    def form_request(
+        self,
+        *,
+        form: str | None = None,
+        formdata: Mapping[str, str | None] | None = None,
+        click: str | None = None,
+        callback: Any = None,
+        metadata: dict[str, Any] | None = None,
+        headers: dict[str, str] | None = None,
+    ) -> Request:
+        """Build the ``Request`` a browser would send submitting a form on this page.
+
+        The fields are the form's own, collected by the browser's rules, with
+        ``formdata`` over them: a value replaces the field, ``None`` removes it,
+        and a name the form lacks is added. ``click`` names the submit button
+        to press; left out, none is — a WebForms page is one form around the
+        whole page, and its first button is as likely to be "log in" as
+        "search". ``form`` is a CSS selector, the first form on the page if
+        left out. See :mod:`collector.crawler.form` for the rules.
+
+        Forwards to ``crawler.request()``, as ``follow()`` does.
+        """
+        url, method, fields = _form_request(
+            self.selector(), self.request.url, form=form, formdata=formdata, click=click
+        )
+        # A GET form sends its fields in the query string, as a browser does.
+        body = {'data': fields} if method == 'POST' else {'params': fields}
+        return self.crawler.request(
+            url, method=method, callback=callback, metadata=metadata, headers=headers, **body
         )

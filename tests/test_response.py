@@ -98,3 +98,45 @@ def test_follow_carries_params_json_and_cookies():
 
     assert req.url == 'https://example.test/api'
     assert req.http_kwargs() == {'params': {'page': 3}, 'json': {'q': 'лот'}}
+
+
+FORM_PAGE = (
+    '<form method="post" action="/list/">'
+    '<input type="hidden" name="__VIEWSTATE" value="abc">'
+    '<input type="submit" name="go" value="Искать">'
+    '</form>'
+)
+
+
+def test_form_request_posts_the_form_through_the_crawler():
+    crawler = _crawler()
+    response = Response(
+        FakeResponse(text=FORM_PAGE), Request(url='https://example.test/list/?page=1'), crawler
+    )
+
+    req = response.form_request(
+        formdata={'__EVENTTARGET': 'pager$2'},
+        click='go',
+        metadata={'page': 2},
+        headers={'Referer': 'https://example.test/list/'},
+    )
+
+    assert (req.method, req.url) == ('POST', 'https://example.test/list/')
+    assert req.http_kwargs() == {
+        'headers': {'Referer': 'https://example.test/list/'},
+        'data': [('__VIEWSTATE', 'abc'), ('__EVENTTARGET', 'pager$2'), ('go', 'Искать')],
+    }
+    assert req.metadata == {'page': 2}
+    # Built by crawler.request(), so a bare callback means parse() — as with follow().
+    assert req.callback == crawler.parse
+
+
+def test_a_get_form_sends_its_fields_as_params():
+    crawler = _crawler()
+    page = FakeResponse(text='<form action="/search"><input name="q" value="лот"></form>')
+    response = Response(page, Request(url='https://example.test/list/'), crawler)
+
+    req = response.form_request()
+
+    assert (req.method, req.url) == ('GET', 'https://example.test/search')
+    assert req.http_kwargs() == {'params': [('q', 'лот')]}
