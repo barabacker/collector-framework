@@ -192,3 +192,46 @@ def test_a_selector_matching_nothing_is_an_error():
 def test_a_selector_matching_something_other_than_a_form_is_an_error():
     with pytest.raises(ValueError, match='#box'):
         submit('<div id="box"><form></form></div>', form='#box')
+
+
+# ── overrides ────────────────────────────────────────────────────────────────
+
+PAGER = (
+    '<form method="post">'
+    '<input type="hidden" name="__EVENTTARGET" value="">'
+    '<input type="hidden" name="__VIEWSTATE" value="abc">'
+    '<input name="q" value="old">'
+    '</form>'
+)
+
+
+def test_an_override_replaces_the_value_in_place():
+    assert fields(PAGER, formdata={'__EVENTTARGET': 'pager$2'}) == [
+        ('__EVENTTARGET', 'pager$2'),
+        ('__VIEWSTATE', 'abc'),
+        ('q', 'old'),
+    ]
+
+
+def test_an_override_collapses_a_repeated_name_to_one_value():
+    html = (
+        '<form><select name="m" multiple>'
+        '<option selected>a</option><option selected>b</option>'
+        '</select></form>'
+    )
+    assert fields(html, formdata={'m': 'c'}) == [('m', 'c')]
+
+
+def test_none_removes_the_field():
+    assert fields(PAGER, formdata={'q': None}) == [('__EVENTTARGET', ''), ('__VIEWSTATE', 'abc')]
+
+
+def test_a_name_the_form_lacks_is_appended():
+    assert fields('<form><input name="a" value="1"></form>', formdata={'__EVENTARGUMENT': ''}) == [
+        ('a', '1'),
+        ('__EVENTARGUMENT', ''),
+    ]
+
+
+def test_none_for_a_name_the_form_lacks_changes_nothing():
+    assert fields('<form><input name="a" value="1"></form>', formdata={'b': None}) == [('a', '1')]

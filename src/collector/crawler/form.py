@@ -38,7 +38,7 @@ def form_request(
     button to press; without it no button is sent at all.
     """
     node = _find(page, form)
-    fields = _collect(node)
+    fields = _override(_collect(node), formdata or {})
 
     action = (node.attrib.get('action') or '').strip()
     url = urljoin(base_url, action) if action else base_url
@@ -88,6 +88,35 @@ def _collect(node: Selector) -> list[tuple[str, str]]:
                 continue
             fields.append((name, control.attrib.get('value', '')))
     return fields
+
+
+def _override(
+    fields: list[tuple[str, str]], formdata: Mapping[str, str | None]
+) -> list[tuple[str, str]]:
+    """Apply ``formdata`` over the collected fields.
+
+    A name the form has keeps its place — the first one, if it repeats — so
+    the body reads in the order a browser would send it. ``None`` removes the
+    name. A name the form lacks is appended: that is how ``__EVENTTARGET`` gets
+    set on a page that renders no such input.
+    """
+    result: list[tuple[str, str]] = []
+    placed: set[str] = set()
+    for name, value in fields:
+        if name not in formdata:
+            result.append((name, value))
+            continue
+        if name in placed:
+            continue
+        placed.add(name)
+        if (override := formdata[name]) is not None:
+            result.append((name, override))
+    result.extend(
+        (name, value)
+        for name, value in formdata.items()
+        if name not in placed and value is not None
+    )
+    return result
 
 
 def _selected(select: Selector) -> list[str]:
