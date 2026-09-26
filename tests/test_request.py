@@ -37,3 +37,11 @@ def test_data_and_json_are_independent_fields():
     req = Request(url='https://example.test/', data='raw=1')
     assert req.http_kwargs() == {'data': 'raw=1'}
     assert req.json is None
+
+
+def test_a_list_of_pairs_reaches_the_transport_as_is():
+    """A form can repeat a name — a dict would keep only the last value."""
+    pairs = [('lot', '1'), ('lot', '2')]
+    req = Request(url='https://example.test/', method='POST', data=pairs, params=[('p', 1)])
+
+    assert req.http_kwargs() == {'params': [('p', 1)], 'data': pairs}
