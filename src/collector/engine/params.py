@@ -15,14 +15,18 @@ from __future__ import annotations
 
 import logging
 from collections.abc import Mapping
-from typing import Any
+from typing import Any, TypeVar
 
 logger = logging.getLogger(__name__)
 
 
+#: What a reader falls back to: an ``int``, or ``None`` for "no limit".
+_Default = TypeVar('_Default', int, int | None)
+
+
 def _read_int(
-    params: Mapping[str, Any], key: str, default: Any, *, minimum: int, log_below: bool
-) -> Any:
+    params: Mapping[str, Any], key: str, default: _Default, *, minimum: int, log_below: bool
+) -> _Default:
     """Read one integer knob: unset keeps ``default``, junk logs and keeps it too.
 
     A value below ``minimum`` also keeps the default; ``log_below`` says whether

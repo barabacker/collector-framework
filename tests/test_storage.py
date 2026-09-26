@@ -15,6 +15,7 @@ import pytest
 from tests.conftest import items_of
 
 from collector.storage import Dataset, MemoryDataset, SqliteDataset
+from collector.storage import sqlite as sqlite_module
 
 #: Every implementation must pass the shared tests below; Task 2 adds 'sqlite'.
 KINDS = ['memory', 'sqlite']
@@ -187,23 +188,89 @@ def test_a_batch_size_below_one_is_refused(tmp_path):
         SqliteDataset(tmp_path / 'items.db', batch_size=0)
 
 
+def _break_inserts(monkeypatch) -> None:
+    """Make the next writes fail the way a locked or broken database does."""
+    monkeypatch.setattr(sqlite_module, '_INSERT', 'INSERT INTO missing VALUES (?, ?, ?)')
+
+
 async def test_a_failed_write_keeps_its_batch_for_the_next_flush(tmp_path, monkeypatch):
     async with SqliteDataset(tmp_path / 'items.db', batch_size=100) as ds:
         await ds.push_data({'n': 1}, crawler='a')
-        write = ds._write
-        calls = 0
-
-        def flaky(rows):
-            nonlocal calls
-            calls += 1
-            if calls == 1:
-                raise sqlite3.OperationalError('database is locked')
-            write(rows)
-
-        monkeypatch.setattr(ds, '_write', flaky)
+        _break_inserts(monkeypatch)
 
         with pytest.raises(sqlite3.OperationalError):
             await ds.flush()
+
+        monkeypatch.undo()
+        assert await items_of(ds) == [{'n': 1}]
+
+
+class _FailsOnce:
+    """A connection whose first insert fails, as a briefly locked database does."""
+
+    def __init__(self, real: sqlite3.Connection) -> None:
+        self.real = real
+        self.failed = False
+
+    def __enter__(self) -> sqlite3.Connection:
+        return self.real.__enter__()
+
+    def __exit__(self, *exc_info: object) -> bool | None:
+        return self.real.__exit__(*exc_info)
+
+    def executemany(self, sql: str, rows: object) -> object:
+        if not self.failed:
+            self.failed = True
+            raise sqlite3.OperationalError('database is locked')
+        return self.real.executemany(sql, rows)
+
+    def __getattr__(self, name: str) -> object:
+        return getattr(self.real, name)
+
+
+async def test_a_batch_queued_behind_a_failed_one_does_not_overtake_it(tmp_path, monkeypatch):
+    async with SqliteDataset(tmp_path / 'items.db', batch_size=1) as ds:
+        connect = ds._connect
+        proxy: _FailsOnce | None = None
+
+        def flaky_connect() -> _FailsOnce:
+            nonlocal proxy
+            proxy = proxy or _FailsOnce(connect())
+            return proxy
+
+        monkeypatch.setattr(ds, '_connect', flaky_connect)
+        # Hold the thread so both batches' writes are queued before either runs.
+        gate = threading.Event()
+        busy = asyncio.get_running_loop().run_in_executor(ds._executor, gate.wait)
+        first = asyncio.create_task(ds.push_data({'n': 1}, crawler='a'))
+        second = asyncio.create_task(ds.push_data({'n': 2}, crawler='a'))
+        await asyncio.sleep(0.05)
+        gate.set()
+        await busy
+
+        with pytest.raises(sqlite3.OperationalError):
+            await first
+        await second
+
+        assert await items_of(ds) == [{'n': 1}, {'n': 2}]
+
+
+async def test_a_cancelled_flush_whose_write_then_fails_keeps_its_batch(tmp_path, monkeypatch):
+    async with SqliteDataset(tmp_path / 'items.db', batch_size=1) as ds:
+        gate = threading.Event()
+        busy = asyncio.get_running_loop().run_in_executor(ds._executor, gate.wait)
+        push = asyncio.create_task(ds.push_data({'n': 1}, crawler='a'))
+        await asyncio.sleep(0.05)
+        push.cancel()
+        with contextlib.suppress(asyncio.CancelledError):
+            await push
+
+        # The write, now on its own, fails once the thread is free.
+        _break_inserts(monkeypatch)
+        gate.set()
+        await busy
+        await ds._submit(lambda: None)  # let the failed write finish first
+        monkeypatch.undo()
 
         assert await items_of(ds) == [{'n': 1}]
 

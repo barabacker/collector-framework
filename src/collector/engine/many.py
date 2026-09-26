@@ -41,7 +41,10 @@ class Outcome:
     #: only when it failed before a crawl existed (building the HTTP client).
     crawl: Crawl | None
     #: ``None`` on success; otherwise the original failure, not the
-    #: ``CrawlError`` that carried it out of ``open_crawl()``.
+    #: ``CrawlError`` that carried it out of ``open_crawl()``. A ``consume``
+    #: that stops early — breaking out of ``crawl.stream()`` — is not a
+    #: failure: ``error`` is ``None`` and ``crawl.stats.reason`` says
+    #: ``'cancelled'``, which a caller counting finished crawls should check.
     error: Exception | None
     #: Seconds from this crawler's start — after waiting for a slot — to its end.
     elapsed: float

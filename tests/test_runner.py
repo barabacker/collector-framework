@@ -258,3 +258,19 @@ def test_run_crawler_passes_a_dataset_through(monkeypatch):
     run_crawler(_Counting, sink=[], dataset=dataset)
 
     assert asyncio.run(items_of(dataset)) == [{'url': URL}]
+
+
+def test_collect_passes_a_dataset_through(monkeypatch):
+    _patch_client(monkeypatch)
+    dataset = MemoryDataset()
+
+    class _Plain(Crawler):
+        name = 'plain'
+        start_urls = [URL]
+
+        async def parse(self, response: Any):
+            yield {'url': response.request.url}
+
+    items = collect(_Plain, dataset=dataset)
+
+    assert asyncio.run(items_of(dataset)) == items == [{'url': URL}]
