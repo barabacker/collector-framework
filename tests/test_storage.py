@@ -12,6 +12,7 @@ from datetime import date, datetime
 from pathlib import Path
 
 import pytest
+from tests.conftest import items_of
 
 from collector.storage import Dataset, MemoryDataset, SqliteDataset
 
@@ -33,10 +34,6 @@ async def dataset(request, tmp_path) -> AsyncIterator[Dataset]:
     ds = _make(request.param, tmp_path)
     yield ds
     await ds.close()
-
-
-async def items_of(ds: Dataset, **kwargs) -> list:
-    return [item async for item in ds.iterate_items(**kwargs)]
 
 
 # ── storing and reading ──────────────────────────────────────────────────────

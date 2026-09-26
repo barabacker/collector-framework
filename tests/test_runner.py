@@ -7,7 +7,7 @@ from dataclasses import replace
 from typing import Any
 
 import pytest
-from tests.conftest import SessionHttp
+from tests.conftest import SessionHttp, items_of
 
 from collector import Crawler, CrawlError, collect, crawl, open_crawl, run_crawler
 from collector.storage import MemoryDataset
@@ -257,8 +257,4 @@ def test_run_crawler_passes_a_dataset_through(monkeypatch):
 
     run_crawler(_Counting, sink=[], dataset=dataset)
 
-    assert asyncio.run(_items(dataset)) == [{'url': URL}]
-
-
-async def _items(dataset: MemoryDataset) -> list[Any]:
-    return [item async for item in dataset.iterate_items()]
+    assert asyncio.run(items_of(dataset)) == [{'url': URL}]

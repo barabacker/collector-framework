@@ -80,9 +80,11 @@ class SqliteDataset(Dataset):
             raise
 
     async def iterate_items(self, *, crawler: str | None = None) -> AsyncIterator[Any]:
+        if self._closed:
+            raise RuntimeError(f'dataset {self.path} is closed')
         await self.flush()
         after = 0
-        while rows := await self._call(self._read, crawler, after):
+        while rows := await self._submit(self._read, crawler, after):
             for _, item in rows:
                 yield json.loads(item)
             after = rows[-1][0]
@@ -102,16 +104,15 @@ class SqliteDataset(Dataset):
     def _submit(self, fn: Callable[..., Any], *args: Any) -> asyncio.Future[Any]:
         return asyncio.get_running_loop().run_in_executor(self._executor, fn, *args)
 
-    async def _call(self, fn: Callable[..., Any], *args: Any) -> Any:
-        if self._closed:
-            raise RuntimeError(f'dataset {self.path} is closed')
-        return await self._submit(fn, *args)
-
     def _connect(self) -> sqlite3.Connection:
         if self._connection is None:
             connection = sqlite3.connect(self.path)
             # WAL lets the sqlite3 shell read the file while a crawl writes to it.
             connection.execute('PRAGMA journal_mode=WAL')
+            # With WAL, NORMAL still survives the process dying; it only stops
+            # an fsync on every batch — which, with many crawls sharing one
+            # file, is most of what writing would otherwise cost.
+            connection.execute('PRAGMA synchronous=NORMAL')
             connection.execute(_SCHEMA)
             connection.execute(_INDEX)
             connection.commit()

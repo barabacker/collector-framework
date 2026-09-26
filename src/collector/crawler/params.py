@@ -7,7 +7,7 @@ run's values arrive as strings (a CLI flag, a job payload) or already typed,
 and become a new instance; the declared one is never changed, so two runs of
 one crawler cannot see each other's values.
 
-Where ``engine.params`` forgives a bad value for the engine's two knobs, this
+Where ``engine.params`` forgives a bad value for the engine's three knobs, this
 refuses one: a date window that silently fell back to "no window" would crawl
 everything, and nobody would notice until the bill came.
 """
