@@ -82,16 +82,16 @@ with:
 
 In `src/collector/crawler/crawler.py`, in `Crawler.request()`, replace:
 
-```python
-data: dict[str, str] | str | None = (None,)
-params: dict[str, Any] | None = (None,)
+```text
+        data: dict[str, str] | str | None = None,
+        params: dict[str, Any] | None = None,
 ```
 
 with:
 
-```python
-data: dict[str, str] | list[tuple[str, str]] | str | None = (None,)
-params: dict[str, Any] | list[tuple[str, Any]] | None = (None,)
+```text
+        data: dict[str, str] | list[tuple[str, str]] | str | None = None,
+        params: dict[str, Any] | list[tuple[str, Any]] | None = None,
 ```
 
 In `src/collector/crawler/response.py`, in `Response.follow()`, make the same replacement of the `data` and `params` parameter lines.

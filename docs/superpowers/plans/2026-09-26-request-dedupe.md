@@ -288,9 +288,9 @@ Expected: FAIL — `TypeError: ... got an unexpected keyword argument 'unique_ke
 
 In `src/collector/crawler/crawler.py`, `Crawler.request()`: add two keyword parameters after `cookies`:
 
-```python
-unique_key: str | None = (None,)
-dont_filter: bool = (False,)
+```text
+        unique_key: str | None = None,
+        dont_filter: bool = False,
 ```
 
 and pass them to `Request(...)`:
@@ -600,14 +600,14 @@ In `README.md`, directly after the "Many crawlers" bullet, add:
 
 Replace the comment on the `max_requests=7,` line:
 
-```python
-max_requests = (7,)  # those pages link back to each other; nothing de-duplicates
+```text
+        max_requests=7,  # those pages link back to each other; nothing de-duplicates
 ```
 
 with
 
-```python
-max_requests = (7,)  # a ceiling still: de-duplication stops loops, not a site that never ends
+```text
+        max_requests=7,  # a ceiling still: de-duplication stops loops, not a site that never ends
 ```
 
 Run: `uv run pytest tests/test_examples.py -q` — all pass.

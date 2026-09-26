@@ -597,14 +597,14 @@ from collector.crawler.params import resolve_params
 
 2. In each of `open_crawl`, `crawl`, `run_crawler` and `collect`, replace the parameter line
 
-```python
-params: dict[str, str] | None = (None,)
+```text
+        params: dict[str, str] | None = None,
 ```
 
 with
 
-```python
-params: Mapping[str, Any] | None = (None,)
+```text
+        params: Mapping[str, Any] | None = None,
 ```
 
 3. In `open_crawl`, directly after `params = params or {}`, add:
