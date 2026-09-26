@@ -20,7 +20,7 @@ from parsel import Selector
 _UNSENT_INPUTS = frozenset({'submit', 'image', 'button', 'reset', 'file'})
 
 #: Every control that can carry a value, in document order.
-_CONTROLS = './/*[self::input or self::select or self::textarea][@name][not(@disabled)]'
+_CONTROLS = ".//*[self::input or self::select or self::textarea][@name != ''][not(@disabled)]"
 
 
 def form_request(
@@ -52,7 +52,10 @@ def _find(page: Selector, form: str | None) -> Selector:
     A GET to the same page instead of a post would look like a crawl that
     worked.
     """
-    matches = page.xpath('//form') if form is None else page.css(form)
+    if form is None:
+        matches = page.xpath('//form')
+    else:
+        matches = [match for match in page.css(form) if match.root.tag == 'form']
     if not matches:
         raise ValueError('no <form> on this page' if form is None else f'no form matches {form!r}')
     return matches[0]

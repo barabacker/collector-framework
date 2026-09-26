@@ -40,6 +40,7 @@ def test_disabled_and_nameless_controls_are_not_sent():
         '<form>'
         '<input name="a" value="1" disabled>'
         '<input value="2">'
+        '<input name="" value="4">'
         '<select name="s" disabled><option>x</option></select>'
         '<input name="b" value="3">'
         '</form>'
@@ -74,6 +75,11 @@ def test_checkbox_and_radio_are_sent_only_when_checked():
     )
     # A checkbox with no value is sent as "on", as a browser does.
     assert fields(html) == [('c1', 'yes'), ('c3', 'on'), ('r', 'b')]
+
+
+def test_the_input_type_is_matched_case_insensitively():
+    html = '<form><input type="CHECKBOX" name="c" checked></form>'
+    assert fields(html) == [('c', 'on')]
 
 
 def test_a_select_sends_its_selected_option():
@@ -112,10 +118,18 @@ def test_a_multiple_select_sends_every_selected_option_and_nothing_by_default():
     assert fields(html) == [('m', '1'), ('m', '3')]
 
 
-def test_a_textarea_sends_its_text_without_the_leading_newline():
+@pytest.mark.parametrize(
+    ('text', 'expected'),
+    [
+        ('\nline one\nline two', 'line one\nline two'),
+        ('\r\nx', 'x'),
+        ('\n\nx', '\nx'),
+    ],
+)
+def test_a_textarea_sends_its_text_with_only_the_one_leading_newline_dropped(text, expected):
     # A browser drops one newline right after <textarea>; lxml keeps it.
-    html = '<form><textarea name="t">\nline one\nline two</textarea></form>'
-    assert fields(html) == [('t', 'line one\nline two')]
+    html = f'<form><textarea name="t">{text}</textarea></form>'
+    assert fields(html) == [('t', expected)]
 
 
 def test_fields_keep_document_order():
@@ -173,3 +187,8 @@ def test_a_page_without_a_form_is_an_error():
 def test_a_selector_matching_nothing_is_an_error():
     with pytest.raises(ValueError, match='#missing'):
         submit('<form></form>', form='#missing')
+
+
+def test_a_selector_matching_something_other_than_a_form_is_an_error():
+    with pytest.raises(ValueError, match='#box'):
+        submit('<div id="box"><form></form></div>', form='#box')
