@@ -120,6 +120,13 @@ async with open_crawl(Quotes) as crawl:
   does, is several requests. `Request(dont_filter=True)` sends one anyway,
   `Request(unique_key=...)` sets the key, `Settings(dedupe=False)` turns it off,
   and `stats.duplicates` counts what was dropped. Keys live for one crawl.
+- **Storage** — pass `dataset=` to any entry point (`crawl_many` included) and
+  every item the crawl emits is also written there, under the crawler's name.
+  `MemoryDataset` keeps them in a list; `SqliteDataset('run.db')` in a file you
+  can query from the `sqlite3` shell while the crawl runs, written in batches
+  from its own thread. `iterate_items(crawler=...)` reads them back and
+  `export_to('x.json' | 'x.jsonl' | 'x.csv')` writes them out. The caller owns
+  the dataset; implement `Dataset` for any other store.
 
 ## Examples
 
@@ -134,11 +141,11 @@ uv run python examples/quotes.py
 
 ## What you do not get, by design
 
-No item schema, no storage, no scheduler, no robots.txt, and no registry — how
-an application names and looks up a crawler is its own business, and a library
-holding global mutable state for it is a cost, not a feature. The framework
-never persists anything: override `process_item()` and write to `ctx.sink`,
-which it passes through untouched.
+No item schema, no scheduler, no robots.txt, and no registry — how an
+application names and looks up a crawler is its own business, and a library
+holding global mutable state for it is a cost, not a feature. Beyond a
+`Dataset` you pass in, the framework persists nothing: override
+`process_item()` and write to `ctx.sink`, which it passes through untouched.
 
 ```python
 class Saving(Quotes):

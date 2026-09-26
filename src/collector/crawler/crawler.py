@@ -139,10 +139,10 @@ class Crawler(ABC):
     async def process_item(self, item: Any) -> None:  # noqa: B027 — optional hook
         """Handle one emitted item. A no-op here; override to persist it.
 
-        The framework stores nothing: an application overrides this to write the
-        item to ``self.ctx.sink`` and to keep whatever counters it needs. The
-        crawl's own ``stats.items`` is counted by the crawl and stays accurate
-        whether or not an override calls ``super()``.
+        Without a dataset the framework stores nothing: an application overrides
+        this to write the item to ``self.ctx.sink`` and to keep whatever counters
+        it needs. The crawl's own ``stats.items`` is counted by the crawl and
+        stays accurate whether or not an override calls ``super()``.
         """
 
     async def on_error(self, request: Request, exc: Exception) -> None:  # noqa: B027 — optional hook

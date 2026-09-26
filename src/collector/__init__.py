@@ -9,9 +9,10 @@ returning the ``Crawl`` that ran it — stats, failures and the crawler itself.
 Crawlers are plain classes: how an application names and looks one up — a
 registry, entry points, a dict — is its own business, not this package's.
 
-The framework stores nothing and knows no item schema: override
-``process_item()`` to do something with what a crawler emits, or call
-``collect()`` to get the items back as a list.
+The framework knows no item schema and stores nothing unless a run is given a
+``Dataset``: pass one to keep every item, override ``process_item()`` to do
+something else with what a crawler emits, or call ``collect()`` to get the
+items back as a list.
 
 What this module exports is what a *crawler* author writes, gathered from the
 two packages underneath it that a crawler touches — :mod:`collector.crawler` (the
@@ -37,6 +38,7 @@ from collector.engine import (
     run_crawler,
 )
 from collector.settings import DEFAULT_RETRY_STATUSES, RetryPolicy, Settings
+from collector.storage import Dataset, MemoryDataset, SqliteDataset
 
 __version__ = '0.0.1'
 
@@ -48,11 +50,14 @@ __all__ = [
     'CrawlError',
     'Crawler',
     'CrawlerContext',
+    'Dataset',
+    'MemoryDataset',
     'Outcome',
     'Request',
     'Response',
     'RetryPolicy',
     'Settings',
+    'SqliteDataset',
     'Stats',
     '__version__',
     'collect',

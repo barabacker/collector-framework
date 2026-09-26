@@ -55,6 +55,9 @@ def test_the_root_exports_what_a_crawler_author_writes():
         'open_crawl',
         'crawl',
         'crawl_many',
+        'Dataset',
+        'MemoryDataset',
+        'SqliteDataset',
         'run_crawler',
         'collect',
     }
