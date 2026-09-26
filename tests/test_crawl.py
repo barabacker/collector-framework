@@ -214,15 +214,19 @@ async def test_stats_time_the_run(ctx_factory):
 
 
 async def test_stats_count_errors_alongside_the_error_list(ctx_factory):
+    # Both pages must fail and be counted, so this crawl tolerates both —
+    # the default max_errors=0 would stop it after the first.
+    class _Tolerant(_FailingBoth):
+        settings = replace(_FailingBoth.settings, max_errors=None)
+
     ctx, _ = ctx_factory(FakeHttp())
-    crawl = Crawl(_FailingBoth(ctx))
+    crawl = Crawl(_Tolerant(ctx))
 
-    with pytest.raises(ValueError):
-        await crawl.run()
+    stats = await crawl.run()
 
-    assert crawl.stats.errors == 2 == len(crawl.errors)
-    assert crawl.stats.requests == 2
-    assert crawl.stats.items == 0
+    assert stats.errors == 2 == len(crawl.errors)
+    assert stats.requests == 2
+    assert stats.items == 0
 
 
 # ── lifecycle ────────────────────────────────────────────────────────────────
@@ -338,7 +342,10 @@ async def test_one_bad_page_does_not_kill_the_worker(ctx_factory):
     class _Failing(_TwoPages):
         name = 'failing'
         # PAGE_2 is only reachable through PAGE_1, which fails — so seed both.
+        # Tolerates the failure: the default max_errors=0 would otherwise stop
+        # the crawl before PAGE_2 is ever sent, which is what this test checks.
         start_urls = [PAGE_1, PAGE_2]
+        settings = replace(_TwoPages.settings, max_errors=None)
 
         async def parse(self, response: Any):
             if response.request.url == PAGE_1:
@@ -348,18 +355,22 @@ async def test_one_bad_page_does_not_kill_the_worker(ctx_factory):
     ctx, _ = ctx_factory(FakeHttp())
     crawl = Crawl(_Failing(ctx))
 
-    with pytest.raises(ValueError, match='bad page'):
-        await crawl.run()
+    stats = await crawl.run()
 
-    assert crawl.stats.items == 1
+    assert stats.items == 1
+    assert stats.errors == 1
 
 
 async def test_every_error_is_collected_with_its_request(ctx_factory):
-    ctx, _ = ctx_factory(FakeHttp())
-    crawl = Crawl(_FailingBoth(ctx))
+    # Both pages must fail and be collected, so this crawl tolerates both —
+    # the default max_errors=0 would stop it after the first.
+    class _Tolerant(_FailingBoth):
+        settings = replace(_FailingBoth.settings, max_errors=None)
 
-    with pytest.raises(ValueError):
-        await crawl.run()
+    ctx, _ = ctx_factory(FakeHttp())
+    crawl = Crawl(_Tolerant(ctx))
+
+    await crawl.run()
 
     assert len(crawl.errors) == 2
     assert {req.url for req, _ in crawl.errors} == {PAGE_1, PAGE_2}
@@ -394,15 +405,18 @@ async def test_errors_are_logged_as_they_happen(ctx_factory, caplog):
 async def test_on_error_is_called_with_the_request_and_exception(ctx_factory):
     seen: list[Any] = []
 
+    # Both pages must fail and be seen, so this crawl tolerates both — the
+    # default max_errors=0 would stop it after the first.
     class _Tracking(_FailingBoth):
+        settings = replace(_FailingBoth.settings, max_errors=None)
+
         async def on_error(self, request: Any, exc: Exception) -> None:
             seen.append((request, exc))
 
     ctx, _ = ctx_factory(FakeHttp())
     crawl = Crawl(_Tracking(ctx))
 
-    with pytest.raises(ValueError):
-        await crawl.run()
+    await crawl.run()
 
     assert {req.url for req, _ in seen} == {PAGE_1, PAGE_2}
     assert all(isinstance(exc, ValueError) for _, exc in seen)
@@ -854,3 +868,119 @@ async def test_a_failed_flush_does_not_hide_the_first_request_error(ctx_factory)
         await crawl.run()
 
     assert any('flushing the dataset failed' in note for note in info.value.__notes__)
+
+
+# ── error policy ─────────────────────────────────────────────────────────────
+
+PAGES = [f'https://example.test/{n}' for n in range(5)]
+
+
+def _flaky(bad: set[int], **overrides: Any) -> type[Crawler]:
+    """Five start pages; the ones numbered in ``bad`` fail in parse()."""
+
+    class _Flaky(Crawler):
+        name = 'flaky'
+        start_urls = PAGES
+        settings = replace(Crawler.settings, **overrides)
+
+        async def parse(self, response: Any):
+            if int(response.request.url.rsplit('/', 1)[1]) in bad:
+                raise ValueError(f'bad {response.request.url}')
+            yield {'url': response.request.url}
+
+    return _Flaky
+
+
+async def test_by_default_the_first_failure_stops_the_crawl(ctx_factory):
+    http = FakeHttp()
+    ctx, _ = ctx_factory(http)
+    crawl = Crawl(_flaky({1})(ctx))
+
+    with pytest.raises(ValueError, match='bad') as info:
+        await crawl.run()
+
+    assert [url for _, url in http.calls] == PAGES[:2]
+    assert crawl.stats.reason == 'max_errors'
+    assert 'crawl stopped after 1 failed requests (max_errors=0)' in info.value.__notes__
+
+
+async def test_failures_within_max_errors_are_tolerated(ctx_factory):
+    ctx, _ = ctx_factory(FakeHttp())
+    crawl = Crawl(_flaky({1, 3}, max_errors=2)(ctx))
+
+    stats = await crawl.run()
+
+    assert (stats.requests, stats.errors, stats.items, stats.reason) == (5, 2, 3, 'done')
+    assert len(crawl.errors) == 2
+
+
+async def test_one_failure_past_max_errors_stops_the_crawl(ctx_factory):
+    http = FakeHttp()
+    ctx, _ = ctx_factory(http)
+    crawl = Crawl(_flaky({0, 1, 2, 3, 4}, max_errors=2)(ctx))
+
+    with pytest.raises(ValueError):
+        await crawl.run()
+
+    assert len(http.calls) == 3
+    assert (crawl.stats.errors, crawl.stats.reason) == (3, 'max_errors')
+
+
+async def test_without_a_limit_failures_never_stop_or_fail_a_crawl(ctx_factory):
+    ctx, _ = ctx_factory(FakeHttp())
+
+    stats = await Crawl(_flaky({0, 1, 2, 3, 4}, max_errors=None)(ctx)).run()
+
+    assert (stats.requests, stats.errors, stats.reason) == (5, 5, 'done')
+
+
+async def test_on_error_sees_the_failure_that_stops_the_crawl(ctx_factory):
+    seen: list[str] = []
+
+    class _Watching(_flaky({1})):
+        async def on_error(self, request: Any, exc: Exception) -> None:
+            seen.append(request.url)
+
+    ctx, _ = ctx_factory(FakeHttp())
+
+    with pytest.raises(ValueError):
+        await Crawl(_Watching(ctx)).run()
+
+    assert seen == [PAGES[1]]
+
+
+async def test_max_errors_can_be_set_per_run(ctx_factory):
+    ctx, _ = ctx_factory(FakeHttp(), params={'max_errors': '1'})
+
+    stats = await Crawl(_flaky({1})(ctx)).run()
+
+    assert (stats.errors, stats.reason) == (1, 'done')
+
+
+async def test_a_streamed_crawl_within_its_tolerance_ends_cleanly(ctx_factory):
+    ctx, _ = ctx_factory(FakeHttp())
+    crawl = Crawl(_flaky({1}, max_errors=1)(ctx))
+
+    items = [item async for item in crawl.stream()]
+
+    assert len(items) == 4
+    assert crawl.stats.errors == 1
+
+
+async def test_a_streamed_crawl_past_its_tolerance_raises_after_its_items(ctx_factory):
+    ctx, _ = ctx_factory(FakeHttp())
+    crawl = Crawl(_flaky({1})(ctx))
+    got: list[Any] = []
+
+    with pytest.raises(ValueError):
+        async for item in crawl.stream():
+            got.append(item)
+
+    assert got == [{'url': PAGES[0]}]
+
+
+async def test_a_tolerated_crawl_still_raises_a_dataset_that_cannot_flush(ctx_factory):
+    ctx, _ = ctx_factory(FakeHttp())
+
+    with pytest.raises(OSError, match='disk full'):
+        await Crawl(_flaky({1}, max_errors=1)(ctx), dataset=_BrokenFlush()).run()

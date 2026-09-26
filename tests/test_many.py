@@ -12,7 +12,7 @@ from typing import Any
 import pytest
 from tests.conftest import SessionHttp
 
-from collector import Crawl, Crawler, Outcome, crawl_many
+from collector import Crawl, Crawler, Outcome, Settings, crawl_many
 from collector.storage import MemoryDataset
 
 
@@ -263,3 +263,22 @@ async def test_one_dataset_keeps_each_crawlers_items_apart(monkeypatch):
 
     assert [item async for item in dataset.iterate_items(crawler='a')] == [{'site': 'a'}]
     assert [item async for item in dataset.iterate_items(crawler='b')] == [{'site': 'b'}]
+
+
+async def test_a_crawler_within_its_tolerance_has_no_error(monkeypatch):
+    _patch_client(monkeypatch)
+
+    class Tolerant(Crawler):
+        name = 'tolerant'
+        start_urls = ['https://tolerant.test/1', 'https://tolerant.test/2']
+        settings = Settings(max_errors=1)
+
+        async def parse(self, response: Any):
+            if response.request.url.endswith('/1'):
+                raise RuntimeError('bad page')
+            yield {}
+
+    [outcome] = await drain([Tolerant])
+
+    assert outcome.error is None
+    assert len(outcome.crawl.errors) == 1
