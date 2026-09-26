@@ -8,6 +8,14 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Added
 
+- Request de-duplication. `request_key(request)` (in `collector.crawler`) is
+  `METHOD|url|sha256(body)`, with the URL's scheme and host lower-cased, its
+  fragment dropped, `params` merged into its query and the query sorted;
+  `Request.unique_key` replaces it and `Request.dont_filter` bypasses the
+  check for one request — `Crawler.request()`, `Response.follow()` and
+  `Response.form_request()` take both. `Settings.dedupe` (on by default) and
+  `Stats.duplicates`. Unlike Crawlee's default, the method and body are part
+  of the key, so ASP.NET pagination — POSTs to one URL — is not collapsed.
 - `crawl_many(crawlers, concurrency=, params=, consume=, log=)` and `Outcome`
   — run several crawlers at once, each through `open_crawl()`, capped at
   `concurrency`, and yield an `Outcome` (`crawler_cls`, `crawl`, `error`,
@@ -60,6 +68,10 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Changed
 
+- **Behaviour change:** a crawl no longer sends a request it has already
+  queued in the same run; the repeat is dropped and counted in
+  `stats.duplicates`. `Settings(dedupe=False)` restores the old behaviour for a
+  crawler, `Request(dont_filter=True)` for one request.
 - `params=` on `open_crawl()`, `crawl()`, `run_crawler()` and `collect()`, and
   `CrawlerContext.params`, accept any `Mapping[str, Any]` rather than only a
   `dict[str, str]`, so a caller that already has typed values — a `date` from
