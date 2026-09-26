@@ -82,6 +82,8 @@ class Response:
         params: dict[str, Any] | list[tuple[str, Any]] | None = None,
         json: Any | None = None,
         cookies: dict[str, str] | None = None,
+        unique_key: str | None = None,
+        dont_filter: bool = False,
     ) -> Request:
         """Build a ``Request`` for a link on this page, resolving it first.
 
@@ -100,6 +102,8 @@ class Response:
             params=params,
             json=json,
             cookies=cookies,
+            unique_key=unique_key,
+            dont_filter=dont_filter,
         )
 
     def form_request(
@@ -111,6 +115,8 @@ class Response:
         callback: Any = None,
         metadata: dict[str, Any] | None = None,
         headers: dict[str, str] | None = None,
+        unique_key: str | None = None,
+        dont_filter: bool = False,
     ) -> Request:
         """Build the ``Request`` a browser would send submitting a form on this page.
 
@@ -130,5 +136,12 @@ class Response:
         # A GET form sends its fields in the query string, as a browser does.
         body = {'data': fields} if method == 'POST' else {'params': fields}
         return self.crawler.request(
-            url, method=method, callback=callback, metadata=metadata, headers=headers, **body
+            url,
+            method=method,
+            callback=callback,
+            metadata=metadata,
+            headers=headers,
+            unique_key=unique_key,
+            dont_filter=dont_filter,
+            **body,
         )

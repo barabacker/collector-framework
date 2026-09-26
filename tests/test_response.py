@@ -140,3 +140,15 @@ def test_a_get_form_sends_its_fields_as_params():
 
     assert (req.method, req.url) == ('GET', 'https://example.test/search')
     assert req.http_kwargs() == {'params': [('q', 'лот')]}
+
+
+def test_follow_and_form_request_forward_the_de_duplication_fields():
+    crawler = _crawler()
+    page = FakeResponse(text='<form method="post"><input name="q" value="x"></form>')
+    response = Response(page, Request(url='https://example.test/'), crawler)
+
+    followed = response.follow('/next', unique_key='next', dont_filter=True)
+    posted = response.form_request(unique_key='form', dont_filter=True)
+
+    assert (followed.unique_key, followed.dont_filter) == ('next', True)
+    assert (posted.unique_key, posted.dont_filter) == ('form', True)
