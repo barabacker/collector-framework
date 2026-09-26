@@ -8,10 +8,11 @@ owns the other half.
 from __future__ import annotations
 
 from abc import ABC, abstractmethod
-from collections.abc import AsyncIterator, Awaitable, Callable
+from collections.abc import AsyncIterator, Awaitable, Callable, Mapping
 from dataclasses import dataclass, field
 from typing import TYPE_CHECKING, Any, ClassVar
 
+from collector.crawler.params import check_declaration, resolve_params
 from collector.crawler.request import Request
 from collector.crawler.response import Response
 from collector.settings import Settings
@@ -35,7 +36,7 @@ class CrawlerContext:
     """
 
     http: HttpClient
-    params: dict[str, str] = field(default_factory=dict)
+    params: Mapping[str, Any] = field(default_factory=dict)
     sink: Any | None = None
     log: Callable[[str], Awaitable[None]] | None = None
 
@@ -51,6 +52,9 @@ class Crawler(ABC):
     TLS, pacing, limits, hooks) instead of the caller knowing about them; a
     subclass narrows its parent's with ``dataclasses.replace``.
 
+    ``params`` is how it declares what a run may set — a page limit, a date
+    window — typed, and checked before the first request.
+
     A crawler is declarative and holds no state of its own: the queue, the
     workers, the counters and the failures all belong to
     :class:`~collector.engine.crawl.Crawl`, which is what running one gives back.
@@ -59,10 +63,21 @@ class Crawler(ABC):
     name: ClassVar[str]
     start_urls: ClassVar[list[str]] = []
     settings: ClassVar[Settings] = Settings()
+    #: What a run may set, as a frozen dataclass instance holding this
+    #: crawler's defaults; a subclass narrows it with ``dataclasses.replace``.
+    #: On an instance it is the run's values, typed — a new object, so this
+    #: declaration never changes. ``None`` declares nothing and leaves a run's
+    #: ``params`` free-form, on ``ctx.params`` only.
+    params: Any = None
+
+    def __init_subclass__(cls, **kwargs: Any) -> None:
+        super().__init_subclass__(**kwargs)
+        check_declaration(cls)
 
     def __init__(self, ctx: CrawlerContext) -> None:
         self.ctx = ctx
         self.http = ctx.http
+        self.params = resolve_params(type(self).params, ctx.params)
 
     def request(
         self,

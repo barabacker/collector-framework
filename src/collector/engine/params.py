@@ -5,18 +5,21 @@ reader is forgiving: unset or unparsable falls back to the default and is
 logged rather than raised — a bad knob should not kill a crawl.
 
 Only the two knobs :class:`~collector.engine.crawl.Crawl` actually honours live
-here. A crawler reading its own params reads its own dict; a helper in this
-package would only promise a name the engine does not know.
+here. A crawler's own knobs are declared on ``Crawler.params`` and converted
+by :mod:`collector.crawler.params`, strictly; a helper in this package would
+only promise a name the engine does not know.
 """
 
 from __future__ import annotations
 
 import logging
+from collections.abc import Mapping
+from typing import Any
 
 logger = logging.getLogger(__name__)
 
 
-def read_concurrency(params: dict[str, str], default: int) -> int:
+def read_concurrency(params: Mapping[str, Any], default: int) -> int:
     """Read ``concurrency`` (number of request workers) from the params.
 
     Falls back to ``default`` (the crawler's ClassVar) when unset or invalid; a
@@ -33,7 +36,7 @@ def read_concurrency(params: dict[str, str], default: int) -> int:
     return value if value > 0 else default
 
 
-def worker_count(params: dict[str, str], default: int) -> int:
+def worker_count(params: Mapping[str, Any], default: int) -> int:
     """How many workers a crawl will actually run.
 
     The one answer to that question. It was being worked out in three places —
@@ -45,7 +48,7 @@ def worker_count(params: dict[str, str], default: int) -> int:
     return max(read_concurrency(params, default), 1)
 
 
-def read_max_requests(params: dict[str, str], default: int | None) -> int | None:
+def read_max_requests(params: Mapping[str, Any], default: int | None) -> int | None:
     """Read ``max_requests`` from the params. ``None`` means no ceiling.
 
     Falls back to ``default`` (the crawler's ``Settings``) when unset or

@@ -20,11 +20,12 @@ from __future__ import annotations
 
 import asyncio
 import logging
-from collections.abc import AsyncIterator, Awaitable, Callable
+from collections.abc import AsyncIterator, Awaitable, Callable, Mapping
 from contextlib import asynccontextmanager
 from typing import Any
 
 from collector.crawler.crawler import Crawler, CrawlerContext
+from collector.crawler.params import resolve_params
 from collector.engine.crawl import Crawl, CrawlError
 from collector.engine.params import worker_count
 from collector.http.client import build_http_client
@@ -36,7 +37,7 @@ logger = logging.getLogger(__name__)
 async def open_crawl(
     crawler_cls: type[Crawler],
     *,
-    params: dict[str, str] | None = None,
+    params: Mapping[str, Any] | None = None,
     sink: Any | None = None,
     log: Callable[[str], Awaitable[None]] | None = None,
 ) -> AsyncIterator[Crawl]:
@@ -55,11 +56,18 @@ async def open_crawl(
     It is also the one place a crawl is assembled, so a failure anywhere under
     it leaves by the same door — wrapped in a :class:`~collector.engine.crawl.CrawlError`
     carrying the crawl, with the original failure chained as its ``__cause__``.
+    The one exception is a bad ``params`` value: that is raised as it is, before
+    anything — session included — is built.
     """
     # The session's connection pool is sized here rather than inside the
     # builder, because only this side knows the params that can raise the
     # worker count above what the crawler declared.
     params = params or {}
+    # Before the session exists: a bad value is a mistake in how the run was
+    # asked for, not a crawl that failed, so it costs no connection and is not
+    # wrapped in a CrawlError. The crawler resolves them again for itself in
+    # __init__, which stays the one place they reach it.
+    resolve_params(crawler_cls.params, params)
     http = build_http_client(
         crawler_cls, concurrency=worker_count(params, crawler_cls.settings.concurrency)
     )
@@ -78,7 +86,7 @@ async def open_crawl(
 async def crawl(
     crawler_cls: type[Crawler],
     *,
-    params: dict[str, str] | None = None,
+    params: Mapping[str, Any] | None = None,
     sink: Any | None = None,
     log: Callable[[str], Awaitable[None]] | None = None,
 ) -> Crawl:
@@ -96,7 +104,7 @@ async def crawl(
 def run_crawler(
     crawler_cls: type[Crawler],
     *,
-    params: dict[str, str] | None = None,
+    params: Mapping[str, Any] | None = None,
     sink: Any | None = None,
     log: Callable[[str], Awaitable[None]] | None = None,
 ) -> Crawl:
@@ -117,7 +125,7 @@ def run_crawler(
 def collect(
     crawler_cls: type[Crawler],
     *,
-    params: dict[str, str] | None = None,
+    params: Mapping[str, Any] | None = None,
     log: Callable[[str], Awaitable[None]] | None = None,
 ) -> list[Any]:
     """Run a crawl and return the items it emitted.

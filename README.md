@@ -100,8 +100,12 @@ async with open_crawl(Quotes) as crawl:
 
 - **Params** — a run's `params` may override `concurrency` and `max_requests`
   without touching the crawler. They arrive as strings from a CLI flag or a job
-  payload, so a bad value falls back to what the crawler declared and is logged,
-  rather than killing the crawl.
+  payload, so a bad value for those two falls back to what the crawler declared
+  and is logged, rather than killing the crawl. A crawler's own knobs — a page
+  limit, a date window — are declared as `params`, a frozen dataclass instance
+  like `settings`, and read typed from `self.params`; a run's values for those
+  are converted from strings and checked before the first request, so a bad
+  value or an unknown name fails the run up front.
 
 ## Examples
 

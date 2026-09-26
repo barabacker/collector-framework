@@ -8,6 +8,16 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Added
 
+- `Crawler.params` — a crawler declares what a run may set as a frozen
+  dataclass instance holding its defaults (a subclass narrows it with
+  `dataclasses.replace`, as with `settings`), and reads a run's values typed
+  from `self.params`, a new instance per run. Values from `params=` are
+  converted from strings (`str`, `int`, `float`, `bool`, `date`, `datetime`,
+  and `X | None`) or taken as already typed; a bad value or an unknown name
+  raises `ValueError` from `open_crawl()` before any HTTP client is built, and
+  a field of an unsupported type or named `concurrency` / `max_requests` raises
+  `TypeError` when the class is defined. A crawler that declares nothing keeps
+  free-form `params`, as before.
 - `Response.form_request(form=, formdata=, click=)` — the `Request` a browser
   would send submitting a form on the page: its successful controls collected
   by the browser's rules (hidden and text inputs, checked boxes, selected
@@ -41,6 +51,10 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Changed
 
+- `params=` on `open_crawl()`, `crawl()`, `run_crawler()` and `collect()`, and
+  `CrawlerContext.params`, accept any `Mapping[str, Any]` rather than only a
+  `dict[str, str]`, so a caller that already has typed values — a `date` from
+  argparse — passes them as they are.
 - `Request.data` and `Request.params` — and the same parameters on
   `Crawler.request()` and `Response.follow()` — accept a list of `(name, value)`
   pairs as well as a dict. A form may send one name twice (a `select multiple`),
