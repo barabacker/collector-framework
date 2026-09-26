@@ -8,6 +8,15 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Added
 
+- `crawl_many(crawlers, concurrency=, params=, consume=, log=)` and `Outcome`
+  — run several crawlers at once, each through `open_crawl()`, capped at
+  `concurrency`, and yield an `Outcome` (`crawler_cls`, `crawl`, `error`,
+  `elapsed`) as each finishes. `consume(crawl)` decides what happens to a
+  crawler's items; without it the crawler's own `process_item()` sees them.
+  `params` are checked for every crawler before any starts. A failure —
+  in the crawl, in `consume`, or building the client — stays in that
+  crawler's outcome with its stats and the original exception, and the others
+  carry on; closing the generator early cancels whatever is still running.
 - `Crawler.params` — a crawler declares what a run may set as a frozen
   dataclass instance holding its defaults (a subclass narrows it with
   `dataclasses.replace`, as with `settings`), and reads a run's values typed
