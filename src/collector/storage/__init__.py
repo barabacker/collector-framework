@@ -11,5 +11,6 @@ from __future__ import annotations
 
 from collector.storage.base import Dataset
 from collector.storage.memory import MemoryDataset
+from collector.storage.sqlite import SqliteDataset
 
-__all__ = ['Dataset', 'MemoryDataset']
+__all__ = ['Dataset', 'MemoryDataset', 'SqliteDataset']

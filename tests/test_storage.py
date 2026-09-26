@@ -2,21 +2,27 @@
 
 from __future__ import annotations
 
+import contextlib
 import json
+import sqlite3
 from collections.abc import AsyncIterator
+from datetime import date, datetime
 from pathlib import Path
 
 import pytest
 
-from collector.storage import Dataset, MemoryDataset
+from collector.storage import Dataset, MemoryDataset, SqliteDataset
 
 #: Every implementation must pass the shared tests below; Task 2 adds 'sqlite'.
-KINDS = ['memory']
+KINDS = ['memory', 'sqlite']
 
 
 def _make(kind: str, tmp_path: Path) -> Dataset:
     if kind == 'memory':
         return MemoryDataset()
+    if kind == 'sqlite':
+        # A small batch, so the shared tests cross a batch boundary.
+        return SqliteDataset(tmp_path / 'items.db', batch_size=2)
     raise AssertionError(kind)
 
 
@@ -123,3 +129,60 @@ async def test_a_dataset_is_an_async_context_manager(tmp_path):
     async with MemoryDataset() as ds:
         await ds.push_data({'n': 1}, crawler='a')
         assert await items_of(ds) == [{'n': 1}]
+
+
+# ── SQLite only ──────────────────────────────────────────────────────────────
+
+
+async def test_sqlite_stores_dates_as_iso_and_other_types_as_text(tmp_path):
+    async with SqliteDataset(tmp_path / 'items.db') as ds:
+        await ds.push_data(
+            {'at': datetime(2026, 9, 26, 10, 0), 'day': date(2026, 9, 26), 'path': Path('x')},
+            crawler='a',
+        )
+        assert await items_of(ds) == [
+            {'at': '2026-09-26T10:00:00', 'day': '2026-09-26', 'path': 'x'}
+        ]
+
+
+async def test_sqlite_reads_include_a_batch_not_yet_written(tmp_path):
+    async with SqliteDataset(tmp_path / 'items.db', batch_size=100) as ds:
+        await ds.push_data({'n': 1}, crawler='a')
+        assert await items_of(ds) == [{'n': 1}]
+
+
+async def test_sqlite_flush_puts_the_batch_in_the_file(tmp_path):
+    path = tmp_path / 'items.db'
+    async with SqliteDataset(path, batch_size=100) as ds:
+        await ds.push_data({'n': 1}, crawler='a')
+        await ds.flush()
+
+        # closing(): a sqlite3 connection's own `with` commits but does not close.
+        with contextlib.closing(sqlite3.connect(path)) as other:
+            rows = other.execute('SELECT crawler, item FROM items').fetchall()
+        assert rows == [('a', '{"n": 1}')]
+
+
+async def test_a_reopened_sqlite_file_keeps_what_was_written(tmp_path):
+    path = tmp_path / 'items.db'
+    async with SqliteDataset(path) as first:
+        await first.push_data({'n': 1}, crawler='a')
+
+    async with SqliteDataset(path) as second:
+        await second.push_data({'n': 2}, crawler='a')
+        assert await items_of(second) == [{'n': 1}, {'n': 2}]
+
+
+async def test_closing_sqlite_twice_is_harmless_and_pushing_after_is_refused(tmp_path):
+    ds = SqliteDataset(tmp_path / 'items.db')
+    await ds.push_data({'n': 1}, crawler='a')
+    await ds.close()
+    await ds.close()
+
+    with pytest.raises(RuntimeError, match='closed'):
+        await ds.push_data({'n': 2}, crawler='a')
+
+
+def test_a_batch_size_below_one_is_refused(tmp_path):
+    with pytest.raises(ValueError, match='batch_size'):
+        SqliteDataset(tmp_path / 'items.db', batch_size=0)
