@@ -2,9 +2,12 @@
 
 from __future__ import annotations
 
-from collections.abc import AsyncIterator, Callable
+import hashlib
+import json as jsonlib
+from collections.abc import AsyncIterator, Callable, Mapping
 from dataclasses import dataclass, field
 from typing import TYPE_CHECKING, Any
+from urllib.parse import parse_qsl, urlencode, urlsplit, urlunsplit
 
 if TYPE_CHECKING:
     from collector.crawler.response import Response
@@ -39,6 +42,11 @@ class Request:
     params: dict[str, Any] | list[tuple[str, Any]] | None = None
     json: Any | None = None
     cookies: dict[str, str] | None = None
+    #: The key a crawl de-duplicates on, when the computed one is wrong for this
+    #: request — see ``request_key()``.
+    unique_key: str | None = None
+    #: Send this request even if the crawl has already queued one with its key.
+    dont_filter: bool = False
 
     def http_kwargs(self) -> dict[str, Any]:
         """The keyword arguments this request hands to ``HttpClient.request``.
@@ -49,3 +57,53 @@ class Request:
         return {
             name: value for name in _TRANSPORT_FIELDS if (value := getattr(self, name)) is not None
         }
+
+
+def request_key(request: Request) -> str:
+    """The key a crawl uses to tell whether it has queued this request before.
+
+    ``request.unique_key`` when set; otherwise ``METHOD|url|body``, where the
+    URL has its scheme and host lower-cased, its fragment dropped, ``params``
+    merged into its query and the query sorted — the path and every parameter
+    are kept, since either can name a different page — and ``body`` is a
+    sha256 of the request's ``data`` and ``json``, empty without either.
+
+    The method and body are in the key because POSTing to one URL with
+    different bodies is how ASP.NET pagination walks its pages: a key of the
+    URL alone would stop it at the first.
+    """
+    if request.unique_key is not None:
+        return request.unique_key
+    url = _normalise_url(request.url, request.params)
+    return f'{request.method.upper()}|{url}|{_body_digest(request.data, request.json)}'
+
+
+def _normalise_url(url: str, params: Any) -> str:
+    parts = urlsplit(url.strip())
+    query = parse_qsl(parts.query, keep_blank_values=True)
+    if params:
+        pairs = params.items() if isinstance(params, Mapping) else params
+        query += [(str(name), str(value)) for name, value in pairs]
+    return urlunsplit(
+        (parts.scheme.lower(), parts.netloc.lower(), parts.path, urlencode(sorted(query)), '')
+    )
+
+
+def _body_digest(data: Any, json: Any) -> str:
+    if data is None and json is None:
+        return ''
+    digest = hashlib.sha256()
+    if data is not None:
+        if isinstance(data, str):
+            canonical = data
+        elif isinstance(data, Mapping):
+            # A dict's order is an accident of how it was built, not a
+            # difference in what is sent.
+            canonical = repr(sorted((str(name), str(value)) for name, value in data.items()))
+        else:
+            canonical = repr([(str(name), str(value)) for name, value in data])
+        digest.update(b'data:' + canonical.encode())
+    if json is not None:
+        body = jsonlib.dumps(json, sort_keys=True, separators=(',', ':'), default=str)
+        digest.update(b'json:' + body.encode())
+    return digest.hexdigest()
