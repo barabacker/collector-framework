@@ -16,7 +16,7 @@ from collections.abc import AsyncIterator
 from dataclasses import dataclass, field
 from typing import TYPE_CHECKING, Any
 
-from collector.crawler.request import Request
+from collector.crawler.request import Request, request_key
 from collector.crawler.response import Response
 from collector.engine.params import read_max_requests, worker_count
 
@@ -39,6 +39,9 @@ class Stats:
     requests: int = 0
     errors: int = 0
     items: int = 0
+    #: Requests dropped because this crawl had already queued one with the same
+    #: key. Never sent, so not in ``requests``.
+    duplicates: int = 0
     started_at: float = 0.0
     finished_at: float | None = None
     #: Why the crawl ended: ``'done'`` (the queue drained), ``'max_requests'``
@@ -86,6 +89,8 @@ class Crawl:
     #: Every request that failed, paired with its exception. ``run()`` re-raises
     #: the first, but a crawl that survived twenty failures should show twenty.
     errors: list[tuple[Request, Exception]] = field(default_factory=list)
+    #: Keys of the requests this run has queued, for ``Settings.dedupe``.
+    _seen: set[str] = field(default_factory=set, init=False, repr=False)
     #: Set only while ``stream()`` is iterating: the channel workers hand items
     #: to. Bounded, so a slow consumer blocks the worker that fed it.
     _out: asyncio.Queue[Any] | None = field(default=None, init=False, repr=False)
@@ -184,7 +189,7 @@ class Crawl:
         await crawler.opened()
         queue: asyncio.Queue[Request] = asyncio.Queue()
         async for req in crawler.start_requests():
-            queue.put_nowait(req)
+            self._enqueue(req, queue)
 
         n_workers = worker_count(params, crawler.settings.concurrency)
         workers = [asyncio.create_task(self._worker(queue, limit)) for _ in range(n_workers)]
@@ -213,6 +218,22 @@ class Crawl:
         if self.errors:
             raise self.errors[0][1]
         return self.stats
+
+    def _enqueue(self, req: Request, queue: asyncio.Queue[Request]) -> None:
+        """Queue a request unless this crawl has already queued one with its key.
+
+        The one door into the queue, for start requests and callbacks alike. A
+        request let through with ``dont_filter`` still records its key, so a
+        plain request for the same page after it is a duplicate.
+        """
+        if self.crawler.settings.dedupe:
+            key = request_key(req)
+            if key in self._seen and not req.dont_filter:
+                self.stats.duplicates += 1
+                logger.debug('crawl.duplicate %s %s', req.method, req.url)
+                return
+            self._seen.add(key)
+        queue.put_nowait(req)
 
     async def _worker(self, queue: asyncio.Queue[Request], limit: int | None) -> None:
         while True:
@@ -250,7 +271,7 @@ class Crawl:
         callback = req.callback or crawler.parse
         async for result in callback(response):
             if isinstance(result, Request):
-                queue.put_nowait(result)
+                self._enqueue(result, queue)
             else:
                 # Counted here rather than in process_item: an override that
                 # forgets super() must not silently corrupt the crawl's count.

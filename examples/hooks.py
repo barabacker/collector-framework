@@ -80,6 +80,10 @@ class Protected(Crawler):
         # trip, after the logging hook and the Throttle the factory installs.
         request_hooks=[stopwatch, send_referer],
         response_hooks=[authenticate],
+        # The two start URLs are identical on purpose, to show two requests
+        # turning into three round trips — dedupe would otherwise drop the
+        # second one before it was ever sent.
+        dedupe=False,
     )
 
     async def parse(self, response: Response) -> Any:

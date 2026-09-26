@@ -124,8 +124,9 @@ class Recording(Crawler):
 class Linked(Recording):
     """Walks ``/links/:n/:offset``: a page of links to pages that do the same.
 
-    Every one of those pages links back, so following them without a ceiling
-    never terminates — the framework de-duplicates nothing, by design.
+    Every one of those pages links back to the others. With dedupe on (the
+    default) that converges once every page has been visited once; a crawler
+    that wants the old never-terminating behaviour turns dedupe off.
     """
 
     name = 'links'
@@ -439,12 +440,12 @@ def test_throttle_paces_the_whole_crawl_not_each_worker() -> None:
 
 
 def test_max_requests_stops_a_crawl_that_would_never_end() -> None:
-    """Those pages link back to each other, and nothing here de-duplicates a URL."""
+    """Those pages link back to each other; with dedupe off, nothing else stops it."""
     trips = RoundTrips()
 
     class Endless(Linked):
         start_urls = [f'{BASE}/links/5/0']
-        settings = settings(max_requests=6, request_hooks=(trips,))
+        settings = settings(max_requests=6, dedupe=False, request_hooks=(trips,))
 
     crawl = run_crawler(Endless)
 

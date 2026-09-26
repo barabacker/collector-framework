@@ -75,6 +75,11 @@ class Settings:
     #: Stop after this many requests; None means no ceiling. A safety valve —
     #: a bug in pagination otherwise crawls forever with nothing to stop it.
     max_requests: int | None = None
+    #: Drop a request whose key (``request_key()``) this crawl already queued.
+    #: A repeated request is almost always a mistake — a lot listed on two
+    #: pages, pages linking to each other — so this is on unless a crawler
+    #: says otherwise; ``Request(dont_filter=True)`` bypasses it for one request.
+    dedupe: bool = True
 
     # ── policy and hooks ────────────────────────────────────────────────────
     retry: RetryPolicy = RetryPolicy()

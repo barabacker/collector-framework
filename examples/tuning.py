@@ -46,7 +46,7 @@ class Fan(Crawler):
         delay=0.25,
         delay_jitter=0.1,  # so the crawl does not hit the site on a metronome
         # ── safety valve ──
-        max_requests=7,  # those pages link back to each other; nothing de-duplicates
+        max_requests=7,  # a backstop even though dedupe now stops the mutual links on its own
         # ── failure ──
         retry=RetryPolicy(attempts=3, multiplier=0.5, max_retry_after=30.0),
     )

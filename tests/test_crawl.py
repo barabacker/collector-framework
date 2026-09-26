@@ -509,7 +509,9 @@ async def test_breaking_out_stops_an_endless_crawl(ctx_factory):
 
         async def parse(self, response: Any):
             yield {'tick': True}
-            yield self.request(PAGE_1)
+            # Deliberately unbounded — dedupe would otherwise drop this after
+            # the first repeat and the crawl would stop being endless.
+            yield self.request(PAGE_1, dont_filter=True)
 
     http = FakeHttp()
     ctx, _ = ctx_factory(http)
@@ -541,7 +543,9 @@ async def test_an_abandoned_stream_leaves_the_crawl_running(ctx_factory):
 
         async def parse(self, response: Any):
             yield {'tick': True}
-            yield self.request(PAGE_1)
+            # Deliberately unbounded — dedupe would otherwise drop this after
+            # the first repeat and the crawl would stop being endless.
+            yield self.request(PAGE_1, dont_filter=True)
 
     ctx, _ = ctx_factory(FakeHttp())
     crawl = Crawl(_Endless(ctx))
@@ -567,7 +571,9 @@ async def test_a_stopped_crawl_does_not_report_itself_as_done(ctx_factory):
 
         async def parse(self, response: Any):
             yield {'tick': True}
-            yield self.request(PAGE_1)
+            # Deliberately unbounded — dedupe would otherwise drop this after
+            # the first repeat and the crawl would stop being endless.
+            yield self.request(PAGE_1, dont_filter=True)
 
     ctx, _ = ctx_factory(FakeHttp())
     crawl = Crawl(_Endless(ctx))
@@ -657,3 +663,107 @@ async def test_a_bad_concurrency_param_cannot_stall_the_crawl(ctx_factory):
     ctx, _ = ctx_factory(FakeHttp(), params={'concurrency': 'lots'})
     async with asyncio.timeout(5):
         assert (await Crawl(_NoWorkers(ctx)).run()).items == 2
+
+
+# ── de-duplication ───────────────────────────────────────────────────────────
+
+
+class _Linking(Crawler):
+    """Page 1 links to page 2 twice; page 2 links back to page 1."""
+
+    name = 'linking'
+    start_urls = [PAGE_1]
+
+    async def parse(self, response: Any):
+        if response.request.url == PAGE_1:
+            yield self.request(PAGE_2)
+            yield self.request(PAGE_2)
+        else:
+            yield self.request(PAGE_1)
+
+
+async def test_a_request_already_queued_is_not_sent_again(ctx_factory):
+    http = FakeHttp()
+    ctx, _ = ctx_factory(http)
+
+    stats = await Crawl(_Linking(ctx)).run()
+
+    assert sorted(url for _, url in http.calls) == [PAGE_1, PAGE_2]
+    assert stats.requests == 2
+    assert stats.duplicates == 2
+
+
+async def test_a_duplicate_start_url_is_dropped_too(ctx_factory):
+    class _Twice(_TwoPages):
+        start_urls = [PAGE_1, PAGE_1]
+
+    http = FakeHttp()
+    ctx, _ = ctx_factory(http)
+
+    stats = await Crawl(_Twice(ctx)).run()
+
+    assert [url for _, url in http.calls].count(PAGE_1) == 1
+    assert stats.duplicates == 1
+
+
+async def test_dont_filter_sends_a_request_again(ctx_factory):
+    class _Again(Crawler):
+        name = 'again'
+        start_urls = [PAGE_1]
+
+        async def parse(self, response: Any):
+            if not response.metadata.get('again'):
+                yield self.request(PAGE_1, dont_filter=True, metadata={'again': True})
+
+    http = FakeHttp()
+    ctx, _ = ctx_factory(http)
+
+    stats = await Crawl(_Again(ctx)).run()
+
+    assert http.calls == [('GET', PAGE_1), ('GET', PAGE_1)]
+    assert stats.duplicates == 0
+
+
+async def test_with_dedupe_off_every_duplicate_is_sent(ctx_factory):
+    class _Loose(_Linking):
+        settings = replace(_Linking.settings, dedupe=False, max_requests=5)
+
+    ctx, _ = ctx_factory(FakeHttp())
+
+    stats = await Crawl(_Loose(ctx)).run()
+
+    assert stats.requests == 5
+    assert stats.duplicates == 0
+
+
+async def test_posts_to_one_url_with_different_bodies_are_all_sent(ctx_factory):
+    class _Pager(Crawler):
+        name = 'pager'
+
+        async def start_requests(self):
+            for target in ('pager$2', 'pager$3'):
+                yield self.request(PAGE_1, method='POST', data={'__EVENTTARGET': target})
+
+        async def parse(self, response: Any):
+            yield {}
+
+    http = FakeHttp()
+    ctx, _ = ctx_factory(http)
+
+    stats = await Crawl(_Pager(ctx)).run()
+
+    assert http.calls == [('POST', PAGE_1), ('POST', PAGE_1)]
+    assert stats.duplicates == 0
+
+
+async def test_duplicates_do_not_use_up_max_requests(ctx_factory):
+    class _Capped(_Linking):
+        settings = replace(_Linking.settings, max_requests=2)
+
+    ctx, _ = ctx_factory(FakeHttp())
+
+    stats = await Crawl(_Capped(ctx)).run()
+
+    # Two distinct pages exactly fill the ceiling; the dropped duplicates were
+    # never queued, so the crawl drained rather than hitting the limit.
+    assert (stats.requests, stats.duplicates, stats.reason) == (2, 2, 'done')

@@ -218,7 +218,9 @@ async def test_open_crawl_stops_a_crawl_a_consumer_walked_away_from(monkeypatch)
 
         async def parse(self, response: Any):
             yield {'tick': True}
-            yield self.request(URL)
+            # Deliberately unbounded — dedupe would otherwise drop this after
+            # the first repeat and the crawl would stop being endless.
+            yield self.request(URL, dont_filter=True)
 
     async with open_crawl(_Endless) as crawl:
         async for _item in crawl.stream():
