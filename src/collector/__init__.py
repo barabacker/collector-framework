@@ -25,7 +25,17 @@ re-exported here. The import you reach for says which of the two you are doing.
 from __future__ import annotations
 
 from collector.crawler import Crawler, CrawlerContext, Request, Response
-from collector.engine import Crawl, CrawlError, Stats, collect, crawl, open_crawl, run_crawler
+from collector.engine import (
+    Crawl,
+    CrawlError,
+    Outcome,
+    Stats,
+    collect,
+    crawl,
+    crawl_many,
+    open_crawl,
+    run_crawler,
+)
 from collector.settings import DEFAULT_RETRY_STATUSES, RetryPolicy, Settings
 
 __version__ = '0.0.1'
@@ -38,6 +48,7 @@ __all__ = [
     'CrawlError',
     'Crawler',
     'CrawlerContext',
+    'Outcome',
     'Request',
     'Response',
     'RetryPolicy',
@@ -46,6 +57,7 @@ __all__ = [
     '__version__',
     'collect',
     'crawl',
+    'crawl_many',
     'open_crawl',
     'run_crawler',
 ]

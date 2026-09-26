@@ -12,8 +12,7 @@ from typing import Any
 import pytest
 from tests.conftest import FakeHttp
 
-from collector import Crawl, Crawler
-from collector.engine.many import Outcome, crawl_many
+from collector import Crawl, Crawler, Outcome, crawl_many
 
 
 class _Http(FakeHttp):
