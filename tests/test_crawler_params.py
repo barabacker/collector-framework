@@ -225,3 +225,23 @@ async def test_open_crawl_refuses_a_bad_value_before_building_a_client(monkeypat
     with pytest.raises(ValueError, match='pages'):
         async with open_crawl(Paged, params={'pages': 'lots'}):
             pass
+
+
+def test_an_int_too_large_for_a_float_is_a_bad_value_not_an_overflow():
+    with pytest.raises(ValueError, match='ratio'):
+        resolve_params(Knobs(), {'ratio': 10**400})
+
+
+def test_several_unknown_keys_are_named_together():
+    with pytest.raises(ValueError, match="unknown params 'aa', 'zz'; known:"):
+        resolve_params(Knobs(), {'zz': '1', 'aa': '1'})
+
+
+def test_a_field_type_that_cannot_be_resolved_names_the_crawler():
+    @dataclass(frozen=True)
+    class Unresolvable:
+        # Postponed annotations: a name no module scope can resolve.
+        when: Nowhere = None  # type: ignore[name-defined]  # noqa: F821
+
+    with pytest.raises(TypeError, match='Declared.params: cannot resolve'):
+        _define(Unresolvable())

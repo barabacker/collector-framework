@@ -15,6 +15,7 @@ everything, and nobody would notice until the bill came.
 from __future__ import annotations
 
 import dataclasses
+import reprlib
 import types
 import typing
 from collections.abc import Callable, Mapping
@@ -95,8 +96,13 @@ def _convert(name: str, annotation: Any, value: Any) -> Any:
         except ValueError:
             pass
     elif _accepts(kind, value):
-        return float(value) if kind is float else value
-    raise ValueError(f'params[{name!r}]: expected {kind.__name__}, got {value!r}')
+        try:
+            return float(value) if kind is float else value
+        except OverflowError:  # an int too large for a float
+            pass
+    # reprlib: a run's value can be anything, and a 5000-digit one does not
+    # belong in an error message whole.
+    raise ValueError(f'params[{name!r}]: expected {kind.__name__}, got {reprlib.repr(value)}')
 
 
 def check_declaration(crawler_cls: type) -> None:
@@ -111,7 +117,14 @@ def check_declaration(crawler_cls: type) -> None:
     owner = crawler_cls.__name__
     if isinstance(declared, type) or not dataclasses.is_dataclass(declared):
         raise TypeError(f'{owner}.params must be a dataclass instance or None, got {declared!r}')
-    for name, annotation in _field_types(declared).items():
+    try:
+        annotations = _field_types(declared)
+    except (NameError, TypeError) as exc:
+        # A type defined in a function, or imported only under TYPE_CHECKING,
+        # cannot be resolved here — and a bare NameError names neither the
+        # crawler nor the field.
+        raise TypeError(f'{owner}.params: cannot resolve the field types: {exc}') from exc
+    for name, annotation in annotations.items():
         if name in ENGINE_KEYS:
             raise TypeError(f'{owner}.params.{name}: the name is reserved for the engine')
         try:
@@ -133,7 +146,8 @@ def resolve_params(declared: Any, raw: Mapping[str, Any]) -> Any:
     unknown = sorted(set(raw) - annotations.keys() - ENGINE_KEYS)
     if unknown:
         known = ', '.join(sorted(annotations.keys() | ENGINE_KEYS))
-        raise ValueError(f'unknown param {", ".join(map(repr, unknown))}; known: {known}')
+        noun = 'param' if len(unknown) == 1 else 'params'
+        raise ValueError(f'unknown {noun} {", ".join(map(repr, unknown))}; known: {known}')
     overrides = {
         name: _convert(name, annotations[name], value)
         for name, value in raw.items()

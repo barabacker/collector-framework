@@ -5,8 +5,9 @@ reader is forgiving: unset or unparsable falls back to the default and is
 logged rather than raised — a bad knob should not kill a crawl.
 
 Only the two knobs :class:`~collector.engine.crawl.Crawl` actually honours live
-here. A crawler reading its own params reads its own dict; a helper in this
-package would only promise a name the engine does not know.
+here. A crawler's own knobs are declared on ``Crawler.params`` and converted
+by :mod:`collector.crawler.params`, strictly; a helper in this package would
+only promise a name the engine does not know.
 """
 
 from __future__ import annotations
