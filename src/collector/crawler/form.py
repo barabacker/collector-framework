@@ -39,6 +39,8 @@ def form_request(
     """
     node = _find(page, form)
     fields = _override(_collect(node), formdata or {})
+    if click is not None:
+        fields.append(_button(node, click))
 
     action = (node.attrib.get('action') or '').strip()
     url = urljoin(base_url, action) if action else base_url
@@ -117,6 +119,23 @@ def _override(
         if name not in placed and value is not None
     )
     return result
+
+
+def _button(node: Selector, name: str) -> tuple[str, str]:
+    """The pair a pressed submit button adds to the body.
+
+    Pressing a button that is not there raises rather than posting without it:
+    overriding a missing field is normal, a missing button is a typo, and the
+    server would answer the unpressed form as if nothing were wrong.
+    """
+    xpath = './/input[@name=$name][not(@disabled)] | .//button[@name=$name][not(@disabled)]'
+    for control in node.xpath(xpath, name=name):
+        kind = (control.attrib.get('type') or '').strip().lower()
+        if control.root.tag == 'input' and kind in ('submit', 'image'):
+            return name, control.attrib.get('value', '')
+        if control.root.tag == 'button' and kind in ('', 'submit'):
+            return name, control.attrib.get('value', '')
+    raise ValueError(f'no submit button named {name!r} in this form')
 
 
 def _selected(select: Selector) -> list[str]:

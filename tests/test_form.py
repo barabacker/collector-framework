@@ -235,3 +235,39 @@ def test_a_name_the_form_lacks_is_appended():
 
 def test_none_for_a_name_the_form_lacks_changes_nothing():
     assert fields('<form><input name="a" value="1"></form>', formdata={'b': None}) == [('a', '1')]
+
+
+# ── click ────────────────────────────────────────────────────────────────────
+
+SEARCH = (
+    '<form method="post">'
+    '<input type="submit" name="login" value="Войти">'
+    '<input name="q" value="лот">'
+    '<input type="submit" name="search" value="Искать">'
+    '<button name="clear" value="1">Очистить</button>'
+    '<button type="button" name="toggle">…</button>'
+    '<input type="submit" name="off" value="x" disabled>'
+    '</form>'
+)
+
+
+def test_nothing_is_clicked_by_default():
+    assert fields(SEARCH) == [('q', 'лот')]
+
+
+def test_a_clicked_submit_input_is_appended_after_the_overrides():
+    assert fields(SEARCH, formdata={'extra': 'x'}, click='search') == [
+        ('q', 'лот'),
+        ('extra', 'x'),
+        ('search', 'Искать'),
+    ]
+
+
+def test_a_button_without_a_type_is_a_submit_button():
+    assert fields(SEARCH, click='clear') == [('q', 'лот'), ('clear', '1')]
+
+
+@pytest.mark.parametrize('name', ['missing', 'toggle', 'q', 'off'])
+def test_clicking_something_that_is_not_a_submit_button_is_an_error(name):
+    with pytest.raises(ValueError, match=name):
+        fields(SEARCH, click=name)
