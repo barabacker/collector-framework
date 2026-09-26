@@ -38,6 +38,20 @@ class FakeHttp:
         return FakeResponse(text=self.pages.get(url, self.default_body), url=url)
 
 
+class SessionHttp(FakeHttp):
+    """FakeHttp that can stand where ``open_crawl()`` expects a session.
+
+    A subclass rather than patching ``__aenter__`` onto ``FakeHttp`` itself,
+    which would leak into every other test that uses the plain fake.
+    """
+
+    async def __aenter__(self) -> SessionHttp:
+        return self
+
+    async def __aexit__(self, *exc_info: Any) -> None:
+        return None
+
+
 @pytest.fixture
 def ctx_factory():
     """Build a CrawlerContext around a FakeHttp, capturing log lines."""

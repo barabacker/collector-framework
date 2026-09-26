@@ -124,9 +124,9 @@ class Recording(Crawler):
 class Linked(Recording):
     """Walks ``/links/:n/:offset``: a page of links to pages that do the same.
 
-    Every one of those pages links back to the others. With dedupe on (the
-    default) that converges once every page has been visited once; a crawler
-    that wants the old never-terminating behaviour turns dedupe off.
+    Every one of those pages links back to the others, so it never terminates:
+    that is what the tests using it need, and ``dont_filter`` keeps it so with
+    de-duplication on.
     """
 
     name = 'links'
@@ -134,7 +134,7 @@ class Linked(Recording):
     async def parse(self, response: Response) -> Any:
         yield {'url': response.request.url}
         for href in response.selector().css('a::attr(href)').getall():
-            yield response.follow(href)
+            yield response.follow(href, dont_filter=True)
 
 
 # ── the transport is really there ───────────────────────────────────────────
@@ -445,7 +445,7 @@ def test_max_requests_stops_a_crawl_that_would_never_end() -> None:
 
     class Endless(Linked):
         start_urls = [f'{BASE}/links/5/0']
-        settings = settings(max_requests=6, dedupe=False, request_hooks=(trips,))
+        settings = settings(max_requests=6, request_hooks=(trips,))
 
     crawl = run_crawler(Endless)
 
@@ -463,7 +463,7 @@ async def test_break_under_open_crawl_stops_the_crawl_and_the_session() -> None:
 
     class Endless(Linked):
         start_urls = [f'{BASE}/links/8/0']
-        settings = settings(delay=0.4, dedupe=False, request_hooks=(trips,))
+        settings = settings(delay=0.4, request_hooks=(trips,))
 
     async with open_crawl(Endless) as crawl:
         async for _item in crawl.stream():
@@ -486,7 +486,7 @@ async def test_break_without_closing_the_generator_leaves_the_crawl_running() ->
 
     class Endless(Linked):
         start_urls = [f'{BASE}/links/8/0']
-        settings = settings(delay=0.3, dedupe=False, request_hooks=(trips,))
+        settings = settings(delay=0.3, request_hooks=(trips,))
 
     http = build_http_client(Endless)
     async with http:

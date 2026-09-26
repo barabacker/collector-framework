@@ -6,7 +6,7 @@ import asyncio
 from typing import Any
 
 import pytest
-from tests.conftest import FakeHttp
+from tests.conftest import SessionHttp
 
 from collector import Crawler, CrawlError, collect, crawl, open_crawl, run_crawler
 
@@ -30,18 +30,9 @@ class _Counting(Crawler):
         self.saved.append(item)
 
 
-def _patch_client(monkeypatch) -> FakeHttp:
-    """Replace the real client factory with a FakeHttp that closes cleanly."""
-    http = FakeHttp()
-
-    async def _aenter(self):
-        return self
-
-    async def _aexit(self, *exc_info):
-        return None
-
-    type(http).__aenter__ = _aenter
-    type(http).__aexit__ = _aexit
+def _patch_client(monkeypatch) -> SessionHttp:
+    """Replace the real client factory with a fake session that closes cleanly."""
+    http = SessionHttp()
     monkeypatch.setattr(
         'collector.engine.runner.build_http_client', lambda crawler_cls, **kwargs: http
     )
