@@ -9,7 +9,7 @@ from typing import Any
 import pytest
 from tests.conftest import FakeHttp
 
-from collector import Crawler, CrawlerContext
+from collector import Crawler, CrawlerContext, open_crawl
 from collector.crawler.params import resolve_params
 
 
@@ -209,3 +209,19 @@ class Reserved:
 def test_a_field_a_run_could_never_set_is_refused_when_the_class_is_defined(declared, message):
     with pytest.raises(TypeError, match=message):
         _define(declared)
+
+
+# ── running ──────────────────────────────────────────────────────────────────
+
+
+async def test_open_crawl_refuses_a_bad_value_before_building_a_client(monkeypatch):
+    def fail(*args: Any, **kwargs: Any) -> Any:
+        raise AssertionError('an HTTP client was built before the params were checked')
+
+    monkeypatch.setattr('collector.engine.runner.build_http_client', fail)
+
+    # A mistake in how the run was asked for, not a failed crawl: a plain
+    # ValueError, not a CrawlError.
+    with pytest.raises(ValueError, match='pages'):
+        async with open_crawl(Paged, params={'pages': 'lots'}):
+            pass

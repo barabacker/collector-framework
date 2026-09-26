@@ -12,11 +12,13 @@ package would only promise a name the engine does not know.
 from __future__ import annotations
 
 import logging
+from collections.abc import Mapping
+from typing import Any
 
 logger = logging.getLogger(__name__)
 
 
-def read_concurrency(params: dict[str, str], default: int) -> int:
+def read_concurrency(params: Mapping[str, Any], default: int) -> int:
     """Read ``concurrency`` (number of request workers) from the params.
 
     Falls back to ``default`` (the crawler's ClassVar) when unset or invalid; a
@@ -33,7 +35,7 @@ def read_concurrency(params: dict[str, str], default: int) -> int:
     return value if value > 0 else default
 
 
-def worker_count(params: dict[str, str], default: int) -> int:
+def worker_count(params: Mapping[str, Any], default: int) -> int:
     """How many workers a crawl will actually run.
 
     The one answer to that question. It was being worked out in three places —
@@ -45,7 +47,7 @@ def worker_count(params: dict[str, str], default: int) -> int:
     return max(read_concurrency(params, default), 1)
 
 
-def read_max_requests(params: dict[str, str], default: int | None) -> int | None:
+def read_max_requests(params: Mapping[str, Any], default: int | None) -> int | None:
     """Read ``max_requests`` from the params. ``None`` means no ceiling.
 
     Falls back to ``default`` (the crawler's ``Settings``) when unset or
