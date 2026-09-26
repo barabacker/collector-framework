@@ -2,9 +2,12 @@
 
 from __future__ import annotations
 
-from collections.abc import AsyncIterator, Callable
+import hashlib
+import json as jsonlib
+from collections.abc import AsyncIterator, Callable, Mapping
 from dataclasses import dataclass, field
 from typing import TYPE_CHECKING, Any
+from urllib.parse import parse_qsl, urlencode, urlsplit, urlunsplit
 
 if TYPE_CHECKING:
     from collector.crawler.response import Response
@@ -39,6 +42,11 @@ class Request:
     params: dict[str, Any] | list[tuple[str, Any]] | None = None
     json: Any | None = None
     cookies: dict[str, str] | None = None
+    #: The key a crawl de-duplicates on, when the computed one is wrong for this
+    #: request — see ``request_key()``.
+    unique_key: str | None = None
+    #: Send this request even if the crawl has already queued one with its key.
+    dont_filter: bool = False
 
     def http_kwargs(self) -> dict[str, Any]:
         """The keyword arguments this request hands to ``HttpClient.request``.
@@ -49,3 +57,73 @@ class Request:
         return {
             name: value for name in _TRANSPORT_FIELDS if (value := getattr(self, name)) is not None
         }
+
+
+def request_key(request: Request) -> str:
+    """The key a crawl uses to tell whether it has queued this request before.
+
+    ``request.unique_key`` when set; otherwise ``METHOD|url|body``, where the
+    URL has its scheme and host lower-cased, its fragment dropped, ``params``
+    merged into its query and the query sorted — the path and every parameter
+    are kept, since either can name a different page — and ``body`` is a
+    sha256 of the request's ``data`` and ``json``, empty without either.
+
+    The method and body are in the key because POSTing to one URL with
+    different bodies is how ASP.NET pagination walks its pages: a key of the
+    URL alone would stop it at the first.
+    """
+    if request.unique_key is not None:
+        return request.unique_key
+    url = _normalise_url(request.url, request.params)
+    return f'{request.method.upper()}|{url}|{_body_digest(request.data, request.json)}'
+
+
+def _normalise_url(url: str, params: Any) -> str:
+    parts = urlsplit(url.strip())
+    # surrogateescape, not the default 'replace': a query escaped in cp1251 or
+    # latin-1 is not UTF-8, and decoding it lossily would give two different
+    # searches one key — the second silently dropped as a duplicate.
+    query = parse_qsl(parts.query, keep_blank_values=True, errors='surrogateescape')
+    if params:
+        pairs = params.items() if isinstance(params, Mapping) else params
+        for name, value in pairs:
+            # Sent with doseq, as curl does: a list is the name repeated.
+            values = value if isinstance(value, list | tuple) else [value]
+            query += [(str(name), str(item)) for item in values]
+    # Only the host is case-insensitive; a user name or password is not.
+    host = (parts.hostname or '') + (f':{parts.port}' if parts.port is not None else '')
+    netloc = parts.netloc.rpartition('@')[0] + '@' + host if '@' in parts.netloc else host
+    return urlunsplit(
+        (
+            parts.scheme.lower(),
+            netloc,
+            parts.path,
+            urlencode(sorted(query), errors='surrogateescape'),
+            '',
+        )
+    )
+
+
+def _body_digest(data: Any, json: Any) -> str:
+    if data is None and json is None:
+        return ''
+    digest = hashlib.sha256()
+    if data is not None:
+        if isinstance(data, bytes | bytearray):
+            # Outside the annotation, but curl sends it, so the key must not choke on it.
+            digest.update(b'data:' + bytes(data))
+            canonical = None
+        elif isinstance(data, str):
+            canonical = data
+        elif isinstance(data, Mapping):
+            # A dict's order is an accident of how it was built, not a
+            # difference in what is sent.
+            canonical = repr(sorted((str(name), str(value)) for name, value in data.items()))
+        else:
+            canonical = repr([(str(name), str(value)) for name, value in data])
+        if canonical is not None:
+            digest.update(b'data:' + canonical.encode())
+    if json is not None:
+        body = jsonlib.dumps(json, sort_keys=True, separators=(',', ':'), default=str)
+        digest.update(b'json:' + body.encode())
+    return digest.hexdigest()

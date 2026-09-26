@@ -113,6 +113,13 @@ async with open_crawl(Quotes) as crawl:
   failing lands in its own `Outcome` — with its stats, and the original
   failure rather than the `CrawlError` around it — and the rest carry on;
   outcomes arrive as crawlers finish.
+- **De-duplication** — a crawl does not send a request it has already queued.
+  Two requests are the same when their method, URL (scheme and host
+  lower-cased, fragment dropped, query sorted, `params` merged in) and body
+  match — so POSTing one URL with different bodies, as ASP.NET pagination
+  does, is several requests. `Request(dont_filter=True)` sends one anyway,
+  `Request(unique_key=...)` sets the key, `Settings(dedupe=False)` turns it off,
+  and `stats.duplicates` counts what was dropped. Keys live for one crawl.
 
 ## Examples
 
@@ -127,11 +134,11 @@ uv run python examples/quotes.py
 
 ## What you do not get, by design
 
-No item schema, no storage, no scheduler, no request de-duplication, no
-robots.txt, and no registry — how an application names and looks up a crawler is
-its own business, and a library holding global mutable state for it is a cost,
-not a feature. The framework never persists anything: override `process_item()` and
-write to `ctx.sink`, which it passes through untouched.
+No item schema, no storage, no scheduler, no robots.txt, and no registry — how
+an application names and looks up a crawler is its own business, and a library
+holding global mutable state for it is a cost, not a feature. The framework
+never persists anything: override `process_item()` and write to `ctx.sink`,
+which it passes through untouched.
 
 ```python
 class Saving(Quotes):

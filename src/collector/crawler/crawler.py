@@ -91,6 +91,8 @@ class Crawler(ABC):
         params: dict[str, Any] | list[tuple[str, Any]] | None = None,
         json: Any | None = None,
         cookies: dict[str, str] | None = None,
+        unique_key: str | None = None,
+        dont_filter: bool = False,
     ) -> Request:
         """Build a ``Request`` defaulting its callback to ``self.parse``."""
         return Request(
@@ -103,6 +105,8 @@ class Crawler(ABC):
             params=params,
             json=json,
             cookies=cookies,
+            unique_key=unique_key,
+            dont_filter=dont_filter,
         )
 
     async def opened(self) -> None:  # noqa: B027 — optional hook

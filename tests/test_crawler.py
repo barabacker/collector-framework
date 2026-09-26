@@ -102,3 +102,13 @@ def test_a_subclass_narrows_its_parents_settings():
     assert _Slow.settings.max_requests == 10
     # Untouched fields still come from the parent.
     assert _Slow.settings.impersonate == Settings().impersonate
+
+
+def test_request_carries_its_de_duplication_fields():
+    req = _crawler().request(PAGE_2, unique_key='lot-42', dont_filter=True)
+    assert (req.unique_key, req.dont_filter) == ('lot-42', True)
+
+
+def test_request_is_filtered_by_default():
+    req = _crawler().request(PAGE_2)
+    assert (req.unique_key, req.dont_filter) == (None, False)

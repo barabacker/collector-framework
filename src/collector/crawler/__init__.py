@@ -9,7 +9,7 @@ is why they sit together.
 from __future__ import annotations
 
 from collector.crawler.crawler import Crawler, CrawlerContext
-from collector.crawler.request import Request
+from collector.crawler.request import Request, request_key
 from collector.crawler.response import Response
 
 __all__ = [
@@ -17,4 +17,5 @@ __all__ = [
     'CrawlerContext',
     'Request',
     'Response',
+    'request_key',
 ]
