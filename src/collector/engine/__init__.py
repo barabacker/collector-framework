@@ -3,7 +3,8 @@
 ``Crawl`` owns one run — the queue, the ``concurrency`` workers, the counters
 and the failures — and ``runner`` assembles everything a run needs in the single
 place it is assembled. ``params`` reads the two knobs the crawl honours out of
-a job's free-form strings. ``many`` runs several crawlers at once over that same single place.
+a job's free-form strings. ``many`` runs several crawlers at once, each through
+that same single place.
 """
 
 from __future__ import annotations
