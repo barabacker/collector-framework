@@ -13,6 +13,7 @@ import pytest
 from tests.conftest import SessionHttp
 
 from collector import Crawl, Crawler, Outcome, crawl_many
+from collector.storage import MemoryDataset
 
 
 def _patch_client(monkeypatch, fail_for: set[type[Crawler]] | None = None) -> list[type[Crawler]]:
@@ -252,3 +253,13 @@ async def test_leaving_early_cancels_the_crawlers_still_running(monkeypatch):
             break
 
     assert reasons == {'slow': 'cancelled'}
+
+
+async def test_one_dataset_keeps_each_crawlers_items_apart(monkeypatch):
+    _patch_client(monkeypatch)
+    dataset = MemoryDataset()
+
+    await drain([_crawler('a'), _crawler('b')], dataset=dataset)
+
+    assert [item async for item in dataset.iterate_items(crawler='a')] == [{'site': 'a'}]
+    assert [item async for item in dataset.iterate_items(crawler='b')] == [{'site': 'b'}]

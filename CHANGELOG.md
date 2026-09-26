@@ -8,6 +8,15 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Added
 
+- `collector.storage`: `Dataset` — append-only, each item tagged with the
+  crawler that emitted it, `push_data` / `iterate_items(crawler=)` / `flush` /
+  `close`, and `export_to()` for `.json`, `.jsonl` and `.csv` — with
+  `MemoryDataset` and `SqliteDataset` (stdlib `sqlite3`, one dedicated thread,
+  batched inserts, WAL). `open_crawl()`, `crawl()`, `run_crawler()`,
+  `collect()` and `crawl_many()` take `dataset=`: every emitted item is pushed
+  after `process_item()`, and the dataset is flushed when the crawl ends. The
+  caller owns it. Modelled on Crawlee's `Dataset`; TinyDB was ruled out because
+  it rewrites its whole file on every insert.
 - Request de-duplication. `request_key(request)` (in `collector.crawler`) is
   `METHOD|url|sha256(body)`, with the URL's scheme and host lower-cased, its
   fragment dropped, `params` merged into its query and the query sorted;

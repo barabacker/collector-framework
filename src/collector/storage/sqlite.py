@@ -1,0 +1,142 @@
+"""A dataset in a SQLite file: for looking at what a crawl collected.
+
+SQLite is in the standard library, an insert does not get dearer as the file
+grows — the reason TinyDB, which rewrites its whole file on every insert, was
+not used — and the file can be opened in the ``sqlite3`` shell while a crawl
+is still writing to it. Items are stored as JSON, one row each, with the
+crawler's name and the time they were pushed beside them; the framework still
+knows no item schema.
+
+    SELECT crawler, count(*) FROM items GROUP BY crawler;
+    SELECT json_extract(item, '$.price') FROM items WHERE crawler = 'centerr';
+"""
+
+from __future__ import annotations
+
+import asyncio
+import json
+import sqlite3
+from collections.abc import AsyncIterator, Callable
+from concurrent.futures import ThreadPoolExecutor
+from datetime import UTC, datetime
+from pathlib import Path
+from typing import Any
+
+from collector.storage.base import Dataset, encode
+
+_SCHEMA = (
+    'CREATE TABLE IF NOT EXISTS items ('
+    'id INTEGER PRIMARY KEY, crawler TEXT NOT NULL, stored_at TEXT NOT NULL, item TEXT NOT NULL)'
+)
+_INDEX = 'CREATE INDEX IF NOT EXISTS items_crawler ON items (crawler)'
+_INSERT = 'INSERT INTO items (crawler, stored_at, item) VALUES (?, ?, ?)'
+#: Rows read per round trip to the SQLite thread while iterating.
+_PAGE = 1000
+
+
+class SqliteDataset(Dataset):
+    """Items in a SQLite file, appended to across runs.
+
+    Every call into SQLite runs on one thread owned by the dataset: a
+    ``sqlite3`` connection may not move between threads, and the event loop —
+    which every concurrent crawl shares — must not wait on the disk. Pushes are
+    buffered and written ``batch_size`` at a time in one transaction; a crawl
+    flushes the rest when it ends, and ``close()`` does too.
+    """
+
+    def __init__(self, path: str | Path, *, batch_size: int = 100) -> None:
+        if batch_size < 1:
+            raise ValueError(f'batch_size must be at least 1, got {batch_size}')
+        self.path = Path(path)
+        self.batch_size = batch_size
+        self._pending: list[tuple[str, str, str]] = []
+        self._executor = ThreadPoolExecutor(max_workers=1, thread_name_prefix='sqlite-dataset')
+        self._connection: sqlite3.Connection | None = None
+        self._closed = False
+
+    async def push_data(self, item: Any, *, crawler: str) -> None:
+        if self._closed:
+            raise RuntimeError(f'dataset {self.path} is closed')
+        self._pending.append((crawler, datetime.now(UTC).isoformat(), encode(item)))
+        if len(self._pending) >= self.batch_size:
+            await self.flush()
+
+    async def flush(self) -> None:
+        if not self._pending:
+            return
+        # Swapped out before the await, so pushes that land meanwhile start a new batch.
+        rows, self._pending = self._pending, []
+        write = self._submit(self._write, rows)
+        try:
+            # shield: these rows have left the buffer, so a caller cancelled while
+            # the write waits its turn on the thread must not take it with it.
+            await asyncio.shield(write)
+        except asyncio.CancelledError:
+            raise
+        except Exception:
+            # A failed transaction wrote nothing; put the rows back in front, so
+            # the next flush — the crawl's own at the end, or close() — retries.
+            self._pending[:0] = rows
+            raise
+
+    async def iterate_items(self, *, crawler: str | None = None) -> AsyncIterator[Any]:
+        await self.flush()
+        after = 0
+        while rows := await self._call(self._read, crawler, after):
+            for _, item in rows:
+                yield json.loads(item)
+            after = rows[-1][0]
+
+    async def close(self) -> None:
+        if self._closed:
+            return
+        try:
+            await self.flush()
+        finally:
+            self._closed = True
+            await self._submit(self._disconnect)
+            self._executor.shutdown(wait=False)
+
+    # ── on the SQLite thread ────────────────────────────────────────────────
+
+    def _submit(self, fn: Callable[..., Any], *args: Any) -> asyncio.Future[Any]:
+        return asyncio.get_running_loop().run_in_executor(self._executor, fn, *args)
+
+    async def _call(self, fn: Callable[..., Any], *args: Any) -> Any:
+        if self._closed:
+            raise RuntimeError(f'dataset {self.path} is closed')
+        return await self._submit(fn, *args)
+
+    def _connect(self) -> sqlite3.Connection:
+        if self._connection is None:
+            connection = sqlite3.connect(self.path)
+            # WAL lets the sqlite3 shell read the file while a crawl writes to it.
+            connection.execute('PRAGMA journal_mode=WAL')
+            connection.execute(_SCHEMA)
+            connection.execute(_INDEX)
+            connection.commit()
+            self._connection = connection
+        return self._connection
+
+    def _write(self, rows: list[tuple[str, str, str]]) -> None:
+        connection = self._connect()
+        with connection:  # one transaction per batch
+            connection.executemany(_INSERT, rows)
+
+    def _read(self, crawler: str | None, after: int) -> list[tuple[int, str]]:
+        connection = self._connect()
+        if crawler is None:
+            cursor = connection.execute(
+                'SELECT id, item FROM items WHERE id > ? ORDER BY id LIMIT ?', (after, _PAGE)
+            )
+        else:
+            cursor = connection.execute(
+                'SELECT id, item FROM items WHERE id > ? AND crawler = ? ORDER BY id LIMIT ?',
+                (after, crawler, _PAGE),
+            )
+        return cursor.fetchall()
+
+    def _disconnect(self) -> None:
+        if self._connection is not None:
+            self._connection.close()
+            self._connection = None

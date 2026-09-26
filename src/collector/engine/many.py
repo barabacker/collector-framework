@@ -26,6 +26,7 @@ from collector.crawler.crawler import Crawler
 from collector.crawler.params import resolve_params
 from collector.engine.crawl import Crawl, CrawlError
 from collector.engine.runner import open_crawl
+from collector.storage.base import Dataset
 
 logger = logging.getLogger(__name__)
 
@@ -51,6 +52,7 @@ async def crawl_many(
     *,
     concurrency: int | None = None,
     params: Mapping[str, Any] | None = None,
+    dataset: Dataset | None = None,
     consume: Callable[[Crawl], Awaitable[None]] | None = None,
     log: Callable[[str, str], Awaitable[None]] | None = None,
 ) -> AsyncIterator[Outcome]:
@@ -59,7 +61,8 @@ async def crawl_many(
     At most ``concurrency`` run together (``None``: no cap). The same
     ``params`` go to every crawler, and are checked for all of them before any
     starts: a value one crawler refuses stops the run while nothing has been
-    built. ``consume(crawl)`` handles a crawler's items — typically by
+    built. One ``dataset``, if given, takes every crawler's items, each under
+    its name. ``consume(crawl)`` handles a crawler's items — typically by
     iterating ``crawl.stream()`` — and without it the crawl just runs.
     ``log(name, message)`` receives every crawler's log lines with its name.
 
@@ -79,7 +82,7 @@ async def crawl_many(
 
     gate = asyncio.Semaphore(concurrency) if concurrency is not None else None
     tasks = [
-        asyncio.create_task(_run_one(crawler_cls, gate, params, consume, log))
+        asyncio.create_task(_run_one(crawler_cls, gate, params, dataset, consume, log))
         for crawler_cls in classes
     ]
     try:
@@ -97,6 +100,7 @@ async def _run_one(
     crawler_cls: type[Crawler],
     gate: asyncio.Semaphore | None,
     params: Mapping[str, Any],
+    dataset: Dataset | None,
     consume: Callable[[Crawl], Awaitable[None]] | None,
     log: Callable[[str, str], Awaitable[None]] | None,
 ) -> Outcome:
@@ -107,7 +111,7 @@ async def _run_one(
         error: Exception | None = None
         try:
             async with open_crawl(
-                crawler_cls, params=params, log=_tagged(crawler_cls, log)
+                crawler_cls, params=params, dataset=dataset, log=_tagged(crawler_cls, log)
             ) as crawl:
                 if consume is not None:
                     await consume(crawl)

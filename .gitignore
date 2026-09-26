@@ -218,5 +218,9 @@ __marimo__/
 .streamlit/secrets.toml
 
 # This project
-#   examples/pipeline.py writes its items to the working directory when run.
+#   Examples write their items to the working directory when run.
 quotes.jsonl
+quotes.db
+quotes.db-wal
+quotes.db-shm
+quotes.csv

@@ -30,9 +30,10 @@ class CrawlerContext:
     reads its limits out of ``params``, ``Crawler.log()`` writes to ``log``,
     and ``sink`` is the application's own, passed through untouched.
 
-    ``sink`` is deliberately untyped: this framework has no storage contract of
-    its own. An application defines what it stores and how, and reads the sink
-    back in its own ``process_item()`` override.
+    ``sink`` is deliberately untyped: it is for whatever an application keeps
+    that is not a ``Dataset`` passed to the run. The application defines what
+    it stores and how, and reads the sink back in its own ``process_item()``
+    override.
     """
 
     http: HttpClient
@@ -139,10 +140,10 @@ class Crawler(ABC):
     async def process_item(self, item: Any) -> None:  # noqa: B027 — optional hook
         """Handle one emitted item. A no-op here; override to persist it.
 
-        The framework stores nothing: an application overrides this to write the
-        item to ``self.ctx.sink`` and to keep whatever counters it needs. The
-        crawl's own ``stats.items`` is counted by the crawl and stays accurate
-        whether or not an override calls ``super()``.
+        Without a dataset the framework stores nothing: an application overrides
+        this to write the item to ``self.ctx.sink`` and to keep whatever counters
+        it needs. The crawl's own ``stats.items`` is counted by the crawl and
+        stays accurate whether or not an override calls ``super()``.
         """
 
     async def on_error(self, request: Request, exc: Exception) -> None:  # noqa: B027 — optional hook

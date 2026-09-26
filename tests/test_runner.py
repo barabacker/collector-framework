@@ -9,6 +9,7 @@ import pytest
 from tests.conftest import SessionHttp
 
 from collector import Crawler, CrawlError, collect, crawl, open_crawl, run_crawler
+from collector.storage import MemoryDataset
 
 URL = 'https://example.test/'
 
@@ -235,3 +236,16 @@ async def test_open_crawl_attaches_the_crawl_to_a_failure(monkeypatch):
 
     assert excinfo.value.crawl is crawl
     assert len(crawl.errors) == 3
+
+
+def test_run_crawler_passes_a_dataset_through(monkeypatch):
+    _patch_client(monkeypatch)
+    dataset = MemoryDataset()
+
+    run_crawler(_Counting, sink=[], dataset=dataset)
+
+    assert asyncio.run(_items(dataset)) == [{'url': URL}]
+
+
+async def _items(dataset: MemoryDataset) -> list[Any]:
+    return [item async for item in dataset.iterate_items()]

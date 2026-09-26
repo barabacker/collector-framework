@@ -1,9 +1,10 @@
 """Writing items somewhere: ``process_item()``, ``sink``, and the crawler afterwards.
 
-The framework stores nothing and knows no item schema. An application overrides
-``process_item()`` and writes to ``ctx.sink`` — whatever it passed in, handed
-back untouched — which is how a database, a file or a queue gets involved
-without this package knowing any of them exist.
+The framework knows no item schema, and without a ``Dataset`` stores nothing (see
+``storage.py`` for that). An application overrides ``process_item()`` and writes
+to ``ctx.sink`` — whatever it passed in, handed back untouched — which is how a
+database, a file or a queue gets involved without this package knowing any of
+them exist.
 
 Anything the run accumulates lives on the crawler, and ``crawl.crawler`` is the
 instance that ran, so a synchronous caller reads its own counters back off it
