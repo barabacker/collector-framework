@@ -11,7 +11,7 @@ repeated name are both legal HTML, and a dict would keep one value of each.
 from __future__ import annotations
 
 from collections.abc import Mapping
-from urllib.parse import urljoin
+from urllib.parse import urljoin, urlsplit, urlunsplit
 
 from parsel import Selector
 
@@ -40,11 +40,15 @@ def form_request(
     node = _find(page, form)
     fields = _override(_collect(node), formdata or {})
     if click is not None:
-        fields.append(_button(node, click))
+        fields.extend(_button(node, click))
 
     action = (node.attrib.get('action') or '').strip()
     url = urljoin(base_url, action) if action else base_url
     method = 'POST' if (node.attrib.get('method') or '').strip().upper() == 'POST' else 'GET'
+    if method == 'GET':
+        # A browser replaces the action's query with the form's fields; left
+        # in, it would be merged with them instead.
+        url = urlunsplit(urlsplit(url)._replace(query=''))
     return url, method, fields
 
 
@@ -121,8 +125,12 @@ def _override(
     return result
 
 
-def _button(node: Selector, name: str) -> tuple[str, str]:
-    """The pair a pressed submit button adds to the body.
+def _button(node: Selector, name: str) -> list[tuple[str, str]]:
+    """The pairs a pressed submit button adds to the body.
+
+    An image input sends where it was clicked, ``name.x`` and ``name.y``,
+    instead of its name — and that is what ASP.NET looks for to tell an
+    ImageButton was pressed.
 
     Pressing a button that is not there raises rather than posting without it:
     overriding a missing field is normal, a missing button is a typo, and the
@@ -131,10 +139,12 @@ def _button(node: Selector, name: str) -> tuple[str, str]:
     xpath = './/input[@name=$name][not(@disabled)] | .//button[@name=$name][not(@disabled)]'
     for control in node.xpath(xpath, name=name):
         kind = (control.attrib.get('type') or '').strip().lower()
-        if control.root.tag == 'input' and kind in ('submit', 'image'):
-            return name, control.attrib.get('value', '')
+        if control.root.tag == 'input' and kind == 'image':
+            return [(f'{name}.x', '0'), (f'{name}.y', '0')]
+        if control.root.tag == 'input' and kind == 'submit':
+            return [(name, control.attrib.get('value', ''))]
         if control.root.tag == 'button' and kind in ('', 'submit'):
-            return name, control.attrib.get('value', '')
+            return [(name, control.attrib.get('value', ''))]
     raise ValueError(f'no submit button named {name!r} in this form')
 
 

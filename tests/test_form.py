@@ -271,3 +271,20 @@ def test_a_button_without_a_type_is_a_submit_button():
 def test_clicking_something_that_is_not_a_submit_button_is_an_error(name):
     with pytest.raises(ValueError, match=name):
         fields(SEARCH, click=name)
+
+
+def test_a_clicked_image_input_sends_its_click_coordinates():
+    # ASP.NET recognises a pressed ImageButton by name.x / name.y, not by name.
+    html = '<form method="post"><input type="image" name="pager$next" src="n.png"></form>'
+    assert fields(html, click='pager$next') == [('pager$next.x', '0'), ('pager$next.y', '0')]
+
+
+def test_a_get_form_drops_the_query_its_action_already_has():
+    # A browser replaces the action's query with the form's fields.
+    url, method, _ = submit('<form action="/s?page=2"><input name="q" value="x"></form>')
+    assert (url, method) == ('https://example.test/s', 'GET')
+
+
+def test_a_post_form_keeps_the_query_of_its_action():
+    url, _, _ = submit('<form action="/s?page=2" method="post"></form>')
+    assert url == 'https://example.test/s?page=2'

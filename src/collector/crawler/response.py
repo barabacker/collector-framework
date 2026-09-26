@@ -31,9 +31,9 @@ class Response:
         self.text: str = raw.text
         self._raw = raw
         self._selector: Selector | None = None
-        #: Only ``follow()`` reads this — everything else here needs no crawl
-        #: at all, which is why building one to unit-test ``selector()`` or
-        #: ``json()`` is not required.
+        #: Only ``follow()`` and ``form_request()`` read this — everything else
+        #: here needs no crawl at all, which is why building one to unit-test
+        #: ``selector()`` or ``json()`` is not required.
         self.crawler = crawler
 
     @property
