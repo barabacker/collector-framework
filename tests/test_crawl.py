@@ -500,18 +500,21 @@ async def test_stream_raises_after_yielding_what_succeeded(ctx_factory):
     assert len(crawl.errors) == 1
 
 
+class _Endless(Crawler):
+    """Re-requests its one page for as long as anyone keeps listening."""
+
+    name = 'endless'
+    start_urls = [PAGE_1]
+
+    async def parse(self, response: Any):
+        yield {'tick': True}
+        # dont_filter: the repeat is the point, and de-duplication would
+        # otherwise let the crawl finish after the first page.
+        yield self.request(PAGE_1, dont_filter=True)
+
+
 async def test_breaking_out_stops_an_endless_crawl(ctx_factory):
     """The whole point of pull: the consumer decides when enough is enough."""
-
-    class _Endless(Crawler):
-        name = 'endless'
-        start_urls = [PAGE_1]
-
-        async def parse(self, response: Any):
-            yield {'tick': True}
-            # Deliberately unbounded — dedupe would otherwise drop this after
-            # the first repeat and the crawl would stop being endless.
-            yield self.request(PAGE_1, dont_filter=True)
 
     http = FakeHttp()
     ctx, _ = ctx_factory(http)
@@ -537,16 +540,6 @@ async def test_breaking_out_stops_an_endless_crawl(ctx_factory):
 async def test_an_abandoned_stream_leaves_the_crawl_running(ctx_factory):
     """Why aclose() exists: break alone does not finalise the generator."""
 
-    class _Endless(Crawler):
-        name = 'endless_leak'
-        start_urls = [PAGE_1]
-
-        async def parse(self, response: Any):
-            yield {'tick': True}
-            # Deliberately unbounded — dedupe would otherwise drop this after
-            # the first repeat and the crawl would stop being endless.
-            yield self.request(PAGE_1, dont_filter=True)
-
     ctx, _ = ctx_factory(FakeHttp())
     crawl = Crawl(_Endless(ctx))
 
@@ -564,16 +557,6 @@ async def test_an_abandoned_stream_leaves_the_crawl_running(ctx_factory):
 
 async def test_a_stopped_crawl_does_not_report_itself_as_done(ctx_factory):
     """'done' means the queue drained. A consumer that walked away is not that."""
-
-    class _Endless(Crawler):
-        name = 'endless_reason'
-        start_urls = [PAGE_1]
-
-        async def parse(self, response: Any):
-            yield {'tick': True}
-            # Deliberately unbounded — dedupe would otherwise drop this after
-            # the first repeat and the crawl would stop being endless.
-            yield self.request(PAGE_1, dont_filter=True)
 
     ctx, _ = ctx_factory(FakeHttp())
     crawl = Crawl(_Endless(ctx))

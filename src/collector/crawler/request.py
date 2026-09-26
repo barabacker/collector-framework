@@ -92,7 +92,8 @@ def _normalise_url(url: str, params: Any) -> str:
             query += [(str(name), str(item)) for item in values]
     # Only the host is case-insensitive; a user name or password is not.
     host = (parts.hostname or '') + (f':{parts.port}' if parts.port is not None else '')
-    netloc = parts.netloc.rpartition('@')[0] + '@' + host if '@' in parts.netloc else host
+    userinfo, at, _ = parts.netloc.rpartition('@')
+    netloc = f'{userinfo}{at}{host}'
     return urlunsplit(
         (
             parts.scheme.lower(),
@@ -111,18 +112,16 @@ def _body_digest(data: Any, json: Any) -> str:
     if data is not None:
         if isinstance(data, bytes | bytearray):
             # Outside the annotation, but curl sends it, so the key must not choke on it.
-            digest.update(b'data:' + bytes(data))
-            canonical = None
+            raw = bytes(data)
         elif isinstance(data, str):
-            canonical = data
+            raw = data.encode()
         elif isinstance(data, Mapping):
             # A dict's order is an accident of how it was built, not a
             # difference in what is sent.
-            canonical = repr(sorted((str(name), str(value)) for name, value in data.items()))
+            raw = repr(sorted((str(name), str(value)) for name, value in data.items())).encode()
         else:
-            canonical = repr([(str(name), str(value)) for name, value in data])
-        if canonical is not None:
-            digest.update(b'data:' + canonical.encode())
+            raw = repr([(str(name), str(value)) for name, value in data]).encode()
+        digest.update(b'data:' + raw)
     if json is not None:
         body = jsonlib.dumps(json, sort_keys=True, separators=(',', ':'), default=str)
         digest.update(b'json:' + body.encode())

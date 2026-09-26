@@ -87,10 +87,10 @@ def _field_types(declared: Any) -> dict[str, Any]:
 
 def _convert(name: str, annotation: Any, value: Any) -> Any:
     kind, optional = _unwrap(annotation)
-    if value is None or (optional and value == ''):
-        if optional:
-            return None
-    elif isinstance(value, str):
+    if optional and (value is None or value == ''):
+        return None
+    # A None for a required field matches neither branch and is refused below.
+    if isinstance(value, str):
         try:
             return _FROM_STRING[kind](value)
         except ValueError:

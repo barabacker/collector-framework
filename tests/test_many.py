@@ -10,30 +10,20 @@ from datetime import date
 from typing import Any
 
 import pytest
-from tests.conftest import FakeHttp
+from tests.conftest import SessionHttp
 
 from collector import Crawl, Crawler, Outcome, crawl_many
-
-
-class _Http(FakeHttp):
-    """FakeHttp that can stand where open_crawl() expects a session."""
-
-    async def __aenter__(self) -> _Http:
-        return self
-
-    async def __aexit__(self, *exc_info: Any) -> None:
-        return None
 
 
 def _patch_client(monkeypatch, fail_for: set[type[Crawler]] | None = None) -> list[type[Crawler]]:
     """Replace the client factory; record which crawler classes asked for one."""
     built: list[type[Crawler]] = []
 
-    def factory(crawler_cls: type[Crawler], **kwargs: Any) -> _Http:
+    def factory(crawler_cls: type[Crawler], **kwargs: Any) -> SessionHttp:
         built.append(crawler_cls)
         if fail_for and crawler_cls in fail_for:
             raise OSError('no route to host')
-        return _Http()
+        return SessionHttp()
 
     monkeypatch.setattr('collector.engine.runner.build_http_client', factory)
     return built
@@ -221,7 +211,7 @@ async def test_bad_params_for_one_crawler_stop_the_run_before_anything_is_built(
 
 
 async def test_a_session_that_fails_to_close_keeps_the_crawl_that_ran(monkeypatch):
-    class _Leaky(_Http):
+    class _Leaky(SessionHttp):
         async def __aexit__(self, *exc_info: Any) -> None:
             raise OSError('close failed')
 
