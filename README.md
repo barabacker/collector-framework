@@ -106,13 +106,20 @@ async with open_crawl(Quotes) as crawl:
   like `settings`, and read typed from `self.params`; a run's values for those
   are converted from strings and checked before the first request, so a bad
   value or an unknown name fails the run up front.
+- **Many crawlers** — `crawl_many(crawlers, concurrency=, params=, consume=,
+  log=)` runs a set of crawlers at once, each through `open_crawl()`, at most
+  `concurrency` together. `consume(crawl)` handles each crawler's items;
+  `log(name, message)` gets every line with the crawler's name. One crawler
+  failing lands in its own `Outcome` — with its stats, and the original
+  failure rather than the `CrawlError` around it — and the rest carry on;
+  outcomes arrive as crawlers finish.
 
 ## Examples
 
-Seven runnable scripts in [`examples/`](examples/), each about one thing —
-pagination, a JSON API, streaming with an early `break`, writing items to a
-sink, what happens when pages fail, hooks that solve a challenge, and the
-pacing knobs.
+Nine runnable scripts in [`examples/`](examples/), each about one thing —
+pagination, a JSON API, submitting a form, streaming with an early `break`,
+several crawlers at once, writing items to a sink, what happens when pages
+fail, hooks that solve a challenge, and the pacing knobs.
 
 ```bash
 uv run python examples/quotes.py

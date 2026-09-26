@@ -50,9 +50,11 @@ def test_the_root_exports_what_a_crawler_author_writes():
         'DEFAULT_RETRY_STATUSES',
         'Crawl',
         'CrawlError',
+        'Outcome',
         'Stats',
         'open_crawl',
         'crawl',
+        'crawl_many',
         'run_crawler',
         'collect',
     }
