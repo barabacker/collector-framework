@@ -66,7 +66,18 @@ class SqliteDataset(Dataset):
             return
         # Swapped out before the await, so pushes that land meanwhile start a new batch.
         rows, self._pending = self._pending, []
-        await self._call(self._write, rows)
+        write = self._submit(self._write, rows)
+        try:
+            # shield: these rows have left the buffer, so a caller cancelled while
+            # the write waits its turn on the thread must not take it with it.
+            await asyncio.shield(write)
+        except asyncio.CancelledError:
+            raise
+        except Exception:
+            # A failed transaction wrote nothing; put the rows back in front, so
+            # the next flush — the crawl's own at the end, or close() — retries.
+            self._pending[:0] = rows
+            raise
 
     async def iterate_items(self, *, crawler: str | None = None) -> AsyncIterator[Any]:
         await self.flush()
@@ -83,13 +94,18 @@ class SqliteDataset(Dataset):
             await self.flush()
         finally:
             self._closed = True
-            await self._call(self._disconnect)
+            await self._submit(self._disconnect)
             self._executor.shutdown(wait=False)
 
     # ── on the SQLite thread ────────────────────────────────────────────────
 
+    def _submit(self, fn: Callable[..., Any], *args: Any) -> asyncio.Future[Any]:
+        return asyncio.get_running_loop().run_in_executor(self._executor, fn, *args)
+
     async def _call(self, fn: Callable[..., Any], *args: Any) -> Any:
-        return await asyncio.get_running_loop().run_in_executor(self._executor, fn, *args)
+        if self._closed:
+            raise RuntimeError(f'dataset {self.path} is closed')
+        return await self._submit(fn, *args)
 
     def _connect(self) -> sqlite3.Connection:
         if self._connection is None:

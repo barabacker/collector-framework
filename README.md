@@ -125,8 +125,10 @@ async with open_crawl(Quotes) as crawl:
   `MemoryDataset` keeps them in a list; `SqliteDataset('run.db')` in a file you
   can query from the `sqlite3` shell while the crawl runs, written in batches
   from its own thread. `iterate_items(crawler=...)` reads them back and
-  `export_to('x.json' | 'x.jsonl' | 'x.csv')` writes them out. The caller owns
-  the dataset; implement `Dataset` for any other store.
+  `export_to('x.json' | 'x.jsonl' | 'x.csv')` writes them out. A SQLite file is
+  appended to across runs — delete it to start over. The caller owns the
+  dataset and closes it (`async with`); the crawl only flushes it. Implement
+  `Dataset` for any other store.
 
 ## Examples
 

@@ -79,8 +79,9 @@ class CrawlError(Exception):
 class Crawl:
     """Runs one crawler to completion and holds everything that run produced.
 
-    An item reaches its consumer two ways, and only two: the crawler's own
-    ``process_item()`` pushes it, and ``stream()`` pulls it. A caller who wants
+    An item reaches its consumer three ways: the crawler's own
+    ``process_item()`` pushes it, a ``dataset`` given to the run stores it, and
+    ``stream()`` pulls it. A caller who wants
     the items without writing an async loop keeps them on the crawler and reads
     them back off ``crawl.crawler`` when the run is over.
     """
@@ -197,6 +198,7 @@ class Crawl:
 
         n_workers = worker_count(params, crawler.settings.concurrency)
         workers = [asyncio.create_task(self._worker(queue, limit)) for _ in range(n_workers)]
+        flush_error: Exception | None = None
         try:
             await queue.join()
         except asyncio.CancelledError:
@@ -219,6 +221,11 @@ class Crawl:
                     # A batch still buffered is written even by a caller that
                     # never closes the dataset — the engine does not own it.
                     await self.dataset.flush()
+            except Exception as exc:  # noqa: BLE001 — decided below, not here
+                # Not raised from a finally: it would replace a cancellation, or
+                # the request error the crawl is about to report.
+                logger.warning('crawl.flush_failed %r', exc)
+                flush_error = exc
             finally:
                 # Always, regardless of how the crawl ended, and before errors
                 # are raised below — a crawler that opened something in
@@ -226,7 +233,11 @@ class Crawl:
                 await crawler.closed(self.stats)
 
         if self.errors:
+            if flush_error is not None:
+                self.errors[0][1].add_note(f'and flushing the dataset failed: {flush_error!r}')
             raise self.errors[0][1]
+        if flush_error is not None:
+            raise flush_error
         return self.stats
 
     def _enqueue(self, req: Request, queue: asyncio.Queue[Request]) -> None:

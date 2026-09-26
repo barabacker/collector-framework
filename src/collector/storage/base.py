@@ -83,7 +83,11 @@ def _to_jsonl(items: list[Any]) -> str:
 
 
 def _to_csv(items: list[Any]) -> str:
-    """One row per item; the columns are every top-level key, in the order first seen."""
+    """One row per item; the columns are every top-level key, in the order first seen.
+
+    Keys become column names through ``str()``, so an int key and the same
+    number as a string share a column — CSV has no way to tell them apart.
+    """
     rows = [
         {str(key): value for key, value in item.items()}
         if isinstance(item, Mapping)
@@ -100,10 +104,15 @@ def _to_csv(items: list[Any]) -> str:
 
 
 def _cell(value: Any) -> Any:
-    """A CSV cell: scalars as they are, anything nested as its JSON."""
+    """A CSV cell: scalars as they are, anything nested as its JSON.
+
+    Booleans as ``true``/``false``, as the JSON exports write them.
+    """
     if value is None:
         return ''
-    if isinstance(value, str | int | float | bool):
+    if isinstance(value, bool):
+        return 'true' if value else 'false'
+    if isinstance(value, str | int | float):
         return value
     if isinstance(value, date):
         return value.isoformat()

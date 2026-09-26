@@ -13,6 +13,7 @@ from __future__ import annotations
 
 import asyncio
 import sys
+from contextlib import aclosing
 from pathlib import Path
 from typing import Any
 
@@ -45,11 +46,12 @@ async def run() -> None:
     async with SqliteDataset('quotes.db') as dataset:
         finished = await crawl(Quotes, dataset=dataset)
         exported = await dataset.export_to('quotes.csv')
-        first = [item async for item in dataset.iterate_items()][:1]
+        async with aclosing(dataset.iterate_items()) as items:
+            first = await anext(items, None)
 
     print(f'{finished.stats.items} items stored in quotes.db, {exported} exported to quotes.csv')
     if first:
-        print(f'  first: {first[0]["author"]} — {first[0]["text"][:50]}…')
+        print(f'  first: {first["author"]} — {first["text"][:50]}…')
 
 
 def main() -> None:

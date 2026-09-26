@@ -824,3 +824,33 @@ async def test_a_streamed_crawl_stores_the_items_it_streams(ctx_factory):
     streamed = [item async for item in crawl.stream()]
 
     assert streamed == [item async for item in dataset.iterate_items()]
+
+
+class _BrokenFlush(MemoryDataset):
+    async def flush(self) -> None:
+        raise OSError('disk full')
+
+
+async def test_a_dataset_that_cannot_flush_fails_the_crawl(ctx_factory):
+    closed: list[str] = []
+
+    class _Closing(_TwoPages):
+        async def closed(self, stats: Any) -> None:
+            closed.append(stats.reason)
+
+    ctx, _ = ctx_factory(FakeHttp())
+
+    with pytest.raises(OSError, match='disk full'):
+        await Crawl(_Closing(ctx), dataset=_BrokenFlush()).run()
+
+    assert closed == ['done']
+
+
+async def test_a_failed_flush_does_not_hide_the_first_request_error(ctx_factory):
+    ctx, _ = ctx_factory(FakeHttp())
+    crawl = Crawl(_FailingBoth(ctx), dataset=_BrokenFlush())
+
+    with pytest.raises(ValueError, match='bad') as info:
+        await crawl.run()
+
+    assert any('flushing the dataset failed' in note for note in info.value.__notes__)

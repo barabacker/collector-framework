@@ -2,9 +2,11 @@
 
 from __future__ import annotations
 
+import asyncio
 import contextlib
 import json
 import sqlite3
+import threading
 from collections.abc import AsyncIterator
 from datetime import date, datetime
 from pathlib import Path
@@ -186,3 +188,57 @@ async def test_closing_sqlite_twice_is_harmless_and_pushing_after_is_refused(tmp
 def test_a_batch_size_below_one_is_refused(tmp_path):
     with pytest.raises(ValueError, match='batch_size'):
         SqliteDataset(tmp_path / 'items.db', batch_size=0)
+
+
+async def test_a_failed_write_keeps_its_batch_for_the_next_flush(tmp_path, monkeypatch):
+    async with SqliteDataset(tmp_path / 'items.db', batch_size=100) as ds:
+        await ds.push_data({'n': 1}, crawler='a')
+        write = ds._write
+        calls = 0
+
+        def flaky(rows):
+            nonlocal calls
+            calls += 1
+            if calls == 1:
+                raise sqlite3.OperationalError('database is locked')
+            write(rows)
+
+        monkeypatch.setattr(ds, '_write', flaky)
+
+        with pytest.raises(sqlite3.OperationalError):
+            await ds.flush()
+
+        assert await items_of(ds) == [{'n': 1}]
+
+
+async def test_a_flush_cancelled_while_it_waits_still_writes_its_batch(tmp_path):
+    async with SqliteDataset(tmp_path / 'items.db', batch_size=1) as ds:
+        # Hold the SQLite thread, so the push's write has to queue behind it.
+        gate = threading.Event()
+        busy = asyncio.get_running_loop().run_in_executor(ds._executor, gate.wait)
+        push = asyncio.create_task(ds.push_data({'n': 1}, crawler='a'))
+        await asyncio.sleep(0.05)
+
+        push.cancel()
+        with contextlib.suppress(asyncio.CancelledError):
+            await push
+        gate.set()
+        await busy
+
+        assert await items_of(ds) == [{'n': 1}]
+
+
+async def test_reading_a_closed_sqlite_dataset_says_it_is_closed(tmp_path):
+    ds = SqliteDataset(tmp_path / 'items.db')
+    await ds.close()
+
+    with pytest.raises(RuntimeError, match='closed'):
+        await items_of(ds)
+
+
+async def test_csv_writes_booleans_as_json_does(dataset, tmp_path):
+    await dataset.push_data({'sold': True, 'active': False}, crawler='a')
+
+    await dataset.export_to(tmp_path / 'out.csv')
+
+    assert (tmp_path / 'out.csv').read_text(encoding='utf-8') == 'sold,active\ntrue,false\n'

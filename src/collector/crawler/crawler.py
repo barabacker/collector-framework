@@ -30,9 +30,10 @@ class CrawlerContext:
     reads its limits out of ``params``, ``Crawler.log()`` writes to ``log``,
     and ``sink`` is the application's own, passed through untouched.
 
-    ``sink`` is deliberately untyped: this framework has no storage contract of
-    its own. An application defines what it stores and how, and reads the sink
-    back in its own ``process_item()`` override.
+    ``sink`` is deliberately untyped: it is for whatever an application keeps
+    that is not a ``Dataset`` passed to the run. The application defines what
+    it stores and how, and reads the sink back in its own ``process_item()``
+    override.
     """
 
     http: HttpClient
