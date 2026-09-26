@@ -98,12 +98,12 @@ def test_a_field_the_run_does_not_set_keeps_the_declared_default():
 
 
 def test_the_engines_own_knobs_are_accepted_alongside_the_fields():
-    raw = {'concurrency': '2', 'max_requests': '3', 'pages': '1'}
+    raw = {'concurrency': '2', 'max_requests': '3', 'max_errors': '4', 'pages': '1'}
     assert resolve_params(Knobs(), raw) == Knobs(pages=1)
 
 
 def test_an_unknown_key_is_an_error_listing_the_known_ones():
-    known = 'at, concurrency, label, max_requests, pages, ratio, since, strict'
+    known = 'at, concurrency, label, max_errors, max_requests, pages, ratio, since, strict'
     with pytest.raises(ValueError, match=f"unknown param 'page'; known: {known}"):
         resolve_params(Knobs(), {'page': '1'})
 
