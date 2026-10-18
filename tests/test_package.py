@@ -45,6 +45,7 @@ def test_the_root_exports_what_a_crawler_author_writes():
         'CrawlerContext',
         'Request',
         'Response',
+        'ResponseStatusError',
         'Settings',
         'RetryPolicy',
         'DEFAULT_RETRY_STATUSES',

@@ -24,7 +24,7 @@ re-exported here. The import you reach for says which of the two you are doing.
 
 from __future__ import annotations
 
-from collector.crawler import Crawler, CrawlerContext, Request, Response
+from collector.crawler import Crawler, CrawlerContext, Request, Response, ResponseStatusError
 from collector.engine import (
     Crawl,
     CrawlError,
@@ -51,6 +51,7 @@ __all__ = [
     'Outcome',
     'Request',
     'Response',
+    'ResponseStatusError',
     'RetryPolicy',
     'Settings',
     'Stats',

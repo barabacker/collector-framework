@@ -241,6 +241,25 @@ crawl.crawler  # the instance, for whatever counters the app kept on it
 cannot corrupt it. `stats.requests` counts requests the crawler asked for —
 retries happen inside the HTTP client and are invisible to it.
 
+## Checking response statuses
+
+Callbacks can explicitly require a status with `response.expect_status(200)` or
+accept several with `response.expect_status(200, 204)`. The method returns `None`
+on success; otherwise it raises `ResponseStatusError`, importable from `collector`.
+The exception carries `status`, `expected_statuses` (a tuple), and the original
+request `url`. It follows the usual `on_error`, `crawl.errors` and `max_errors`
+policy. At least one expected status is required.
+
+Responses are never rejected automatically. Handle special statuses before checking:
+
+```python
+async def parse_detail(self, response):
+    if response.status == 404:
+        return
+    response.expect_status(200)
+    yield {'title': response.selector().css('h1::text').get()}
+```
+
 ## Testing without a network
 
 Import helpers explicitly from `collector.testing`. They need no pytest dependency.

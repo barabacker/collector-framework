@@ -16,6 +16,17 @@ if TYPE_CHECKING:
     from collector.crawler.crawler import Crawler
 
 
+class ResponseStatusError(Exception):
+    """A response did not match the statuses explicitly accepted by its callback."""
+
+    def __init__(self, status: int, expected_statuses: tuple[int, ...], url: str) -> None:
+        self.status = status
+        self.expected_statuses = expected_statuses
+        self.url = url
+        expected = ', '.join(str(value) for value in expected_statuses)
+        super().__init__(f'Expected HTTP {expected}, got {status} for {url}')
+
+
 class Response:
     """Wraps the result of HttpClient.request().
 
@@ -35,6 +46,16 @@ class Response:
         #: here needs no crawl at all, which is why building one to unit-test
         #: ``selector()`` or ``json()`` is not required.
         self.crawler = crawler
+
+    def expect_status(self, status: int, *other_statuses: int) -> None:
+        """Require one of the supplied statuses, otherwise raise ResponseStatusError.
+
+        This check is opt-in; callbacks may handle any status themselves. The
+        exception identifies the original request URL, like other crawl errors.
+        """
+        expected = (status, *other_statuses)
+        if self.status not in expected:
+            raise ResponseStatusError(self.status, expected, self.request.url)
 
     @property
     def raw(self) -> Any:

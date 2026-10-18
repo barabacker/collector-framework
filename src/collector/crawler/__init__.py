@@ -10,12 +10,13 @@ from __future__ import annotations
 
 from collector.crawler.crawler import Crawler, CrawlerContext
 from collector.crawler.request import Request, request_key
-from collector.crawler.response import Response
+from collector.crawler.response import Response, ResponseStatusError
 
 __all__ = [
     'Crawler',
     'CrawlerContext',
     'Request',
     'Response',
+    'ResponseStatusError',
     'request_key',
 ]

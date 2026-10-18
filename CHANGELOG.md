@@ -6,6 +6,13 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Response status checks
+
+- `response.expect_status(200)` or `response.expect_status(200, 204)` explicitly
+  validates a response. A mismatch raises public `ResponseStatusError` with
+  `status`, `expected_statuses` and the original request `url`. No automatic
+  status rejection is introduced.
+
 ### Testing
 
 - Added `collector.testing`: `make_crawler`, `make_response`, `collect_callback`,
