@@ -6,6 +6,12 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Testing
+
+- Added `collector.testing`: `make_crawler`, `make_response`, `collect_callback`,
+  `FakeHttp` and `FakeResponse` for offline callback and full-crawl tests.
+  HTTP fixtures match method and literal URL; missing fixtures raise `LookupError`.
+
 ### Breaking changes
 
 - Removed `collector.storage`, `Dataset`, `MemoryDataset`, `SqliteDataset`,

@@ -1,6 +1,6 @@
 # Public crawler testing helpers Implementation Plan
 
-> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking. Execute in this session without subagents, as previously chosen by the user.
+> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [x]`) syntax for tracking. Execute in this session without subagents, as previously chosen by the user.
 
 **Goal:** Дать авторам краулеров публичные инструменты для тестирования callback и полного обхода без сети.
 
@@ -67,15 +67,15 @@ git -c safe.directory=G:/hub/barabacker/collector-framework diff --check
 - `async close(self) -> None`, `async __aenter__(self) -> FakeHttp`, `async __aexit__(self, *exc_info: Any) -> None`.
 - Атрибуты `calls: list[tuple[str, str]]`, `sent: list[dict[str, Any]]`, `closed: bool`.
 
-- [ ] Написать тесты defaults/UTF-8/явного пустого content и независимости headers. Проверить `FakeResponse(text='я').content == 'я'.encode('utf-8')`, `FakeResponse(text='x', content=b'').content == b''`, заголовок `Content-Type` доступен как `content-type`.
-- [ ] Написать тесты маршрутов GET/POST одного URL, lowercase метода, буквального URL, возврата str/статуса/Exception. Для исключения проверить `caught.value is failure`; для неизвестного URL — LookupError с методом и URL.
-- [ ] Написать тесты повторных запросов: исходная FakeResponse сохраняет пустой url и headers, полученный ответ имеет URL запроса. Проверить calls/sent для успешных и неуспешных попыток, поверхностное копирование kwargs.
-- [ ] Написать тесты `closed` после контекста и исключения внутри контекста, повторного close, RuntimeError после close. События запросов и словари разных клиентов независимы.
-- [ ] Запустить `tests/test_testing_http.py`: до реализации ожидается отсутствие публичного модуля/API.
-- [ ] Реализовать фикстуры в testing.py. Использовать существующий `curl_cffi.requests.headers.Headers`, предварительно проверив его API в установленном пакете. Нормализовать методы при регистрации и запросе, URL не менять. Копировать raw-ответ и headers при выдаче; не клонировать произвольные вложенные kwargs. Отсутствие маршрута никогда не вызывает настоящий транспорт.
-- [ ] Заменить внутреннюю FakeResponse на публичную. Сохранить прежние параметры FakeHttp(pages с URL-ключами, default_body) и SessionHttp через внутренний адаптер; запись calls/sent делегировать публичному request. Не менять ctx_factory и не ослаблять публичный fail-fast контракт.
-- [ ] Запустить целевые и существующие offline-тесты: устранить только реальные несовместимости адаптера, без ослабления assertions.
-- [ ] Проверить Ruff и diff; commit `feat: expose offline HTTP testing fixtures` с явным списком файлов.
+- [x] Написать тесты defaults/UTF-8/явного пустого content и независимости headers. Проверить `FakeResponse(text='я').content == 'я'.encode('utf-8')`, `FakeResponse(text='x', content=b'').content == b''`, заголовок `Content-Type` доступен как `content-type`.
+- [x] Написать тесты маршрутов GET/POST одного URL, lowercase метода, буквального URL, возврата str/статуса/Exception. Для исключения проверить `caught.value is failure`; для неизвестного URL — LookupError с методом и URL.
+- [x] Написать тесты повторных запросов: исходная FakeResponse сохраняет пустой url и headers, полученный ответ имеет URL запроса. Проверить calls/sent для успешных и неуспешных попыток, поверхностное копирование kwargs.
+- [x] Написать тесты `closed` после контекста и исключения внутри контекста, повторного close, RuntimeError после close. События запросов и словари разных клиентов независимы.
+- [x] Запустить `tests/test_testing_http.py`: до реализации ожидается отсутствие публичного модуля/API.
+- [x] Реализовать фикстуры в testing.py. Использовать существующий `curl_cffi.requests.headers.Headers`, предварительно проверив его API в установленном пакете. Нормализовать методы при регистрации и запросе, URL не менять. Копировать raw-ответ и headers при выдаче; не клонировать произвольные вложенные kwargs. Отсутствие маршрута никогда не вызывает настоящий транспорт.
+- [x] Заменить внутреннюю FakeResponse на публичную. Сохранить прежние параметры FakeHttp(pages с URL-ключами, default_body) и SessionHttp через внутренний адаптер; запись calls/sent делегировать публичному request. Не менять ctx_factory и не ослаблять публичный fail-fast контракт.
+- [x] Запустить целевые и существующие offline-тесты: устранить только реальные несовместимости адаптера, без ослабления assertions.
+- [x] Проверить Ruff и diff; commit `feat: expose offline HTTP testing fixtures` с явным списком файлов.
 
 ## Task 2: Создание краулера и тестирование callback
 
@@ -111,13 +111,13 @@ async def collect_callback(
 
 C — TypeVar bound Crawler; typing-импорты совместимы с Python 3.11.
 
-- [ ] Написать тест make_crawler: настоящий подкласс, штатная проверка params, идентичность sink/http/log, сохранённые settings. В частности `crawler.http is falsy_http`; счётчики opened/closed/start_requests/pipeline остаются пустыми. Клиент по умолчанию выдаёт LookupError при запросе.
-- [ ] Написать тест make_response: `response.request is request`, `response.metadata is request.metadata`, status, UTF-8 raw.content, raw.url, заголовки, selector и json. На HTML с формой проверить разрешение follow и form_request относительно request.url через переданный crawler.
-- [ ] Написать тест collect_callback со смешанными Request, dict и None: `requests == [first, second]`, `items == [item, None]`. Проверить один проход custom async iterable, исходное исключение и CancelledError без упаковки; pipeline не вызван.
-- [ ] Запустить `tests/test_testing.py`: ожидается отсутствие помощников.
-- [ ] Реализовать помощники через настоящий CrawlerContext/конструктор подкласса/Response. Проверять `http is None`; когда log не задан, сохранять стандартный log контекста. Не перехватывать ошибки callback и не добавлять lifecycle.
-- [ ] Запустить `tests/test_testing.py` и `tests/test_testing_http.py`; проверить Ruff/diff.
-- [ ] Commit `feat: add crawler callback testing helpers` с явным списком файлов.
+- [x] Написать тест make_crawler: настоящий подкласс, штатная проверка params, идентичность sink/http/log, сохранённые settings. В частности `crawler.http is falsy_http`; счётчики opened/closed/start_requests/pipeline остаются пустыми. Клиент по умолчанию выдаёт LookupError при запросе.
+- [x] Написать тест make_response: `response.request is request`, `response.metadata is request.metadata`, status, UTF-8 raw.content, raw.url, заголовки, selector и json. На HTML с формой проверить разрешение follow и form_request относительно request.url через переданный crawler.
+- [x] Написать тест collect_callback со смешанными Request, dict и None: `requests == [first, second]`, `items == [item, None]`. Проверить один проход custom async iterable, исходное исключение и CancelledError без упаковки; pipeline не вызван.
+- [x] Запустить `tests/test_testing.py`: ожидается отсутствие помощников.
+- [x] Реализовать помощники через настоящий CrawlerContext/конструктор подкласса/Response. Проверять `http is None`; когда log не задан, сохранять стандартный log контекста. Не перехватывать ошибки callback и не добавлять lifecycle.
+- [x] Запустить `tests/test_testing.py` и `tests/test_testing_http.py`; проверить Ruff/diff.
+- [x] Commit `feat: add crawler callback testing helpers` с явным списком файлов.
 
 ## Task 3: Полный обход и документация
 
@@ -125,15 +125,15 @@ C — TypeVar bound Crawler; typing-импорты совместимы с Pytho
 
 **Interfaces:** Использует только публичные помощники задач 1–2 и существующие Crawl/Settings; production entry points не меняются.
 
-- [ ] Написать тест краулера с двумя страницами и pipeline: создать через make_crawler, выполнить Crawl.run, проверить порядок open/process/close, обработанные элементы, `stats.items == 2`, завершённость статистики и два HTTP-вызова. До выхода из async with FakeHttp клиент открыт; после выхода закрыт.
-- [ ] Написать тест отсутствующей второй страницы с `max_errors=1`: проверить штатную ошибку/причину остановки текущего Crawl, `stats.errors == 1` и закрытие pipeline. Точный тип внешней ошибки сверить с существующим контрактом Crawl.run, не вводить новую упаковку.
-- [ ] Запустить `tests/test_testing_crawl.py`: это интеграционная проверка уже реализованных частей; исправлять только публичные помощники, если выявлена их ошибка.
-- [ ] Добавить README-примеры прямого callback и полного Crawl с FakeHttp. Явно описать method+URL, отсутствие автоматического запуска pipeline при collect_callback, заимствованный http и ограничения fake (нет hooks/retry/сетевой эмуляции). Отметить модуль в CHANGELOG.
-- [ ] Выполнить полную offline-проверку, Ruff и diff-check командами выше. Проверить diff: root exports, runtime, зависимости и потребитель не изменены.
-- [ ] Самостоятельно проверить покрытие спецификации, владение ресурсами и ошибки. Исправить выявленное и повторить затронутые проверки.
-- [ ] Commit `docs: demonstrate offline crawler and pipeline testing` с интеграционными тестами и документацией. Сообщить результаты, коммиты и состояние ветки; merge/push не выполнять.
+- [x] Написать тест краулера с двумя страницами и pipeline: создать через make_crawler, выполнить Crawl.run, проверить порядок open/process/close, обработанные элементы, `stats.items == 2`, завершённость статистики и два HTTP-вызова. До выхода из async with FakeHttp клиент открыт; после выхода закрыт.
+- [x] Написать тест отсутствующей второй страницы с `max_errors=1`: проверить штатную ошибку/причину остановки текущего Crawl, `stats.errors == 1` и закрытие pipeline. Точный тип внешней ошибки сверить с существующим контрактом Crawl.run, не вводить новую упаковку.
+- [x] Запустить `tests/test_testing_crawl.py`: это интеграционная проверка уже реализованных частей; исправлять только публичные помощники, если выявлена их ошибка.
+- [x] Добавить README-примеры прямого callback и полного Crawl с FakeHttp. Явно описать method+URL, отсутствие автоматического запуска pipeline при collect_callback, заимствованный http и ограничения fake (нет hooks/retry/сетевой эмуляции). Отметить модуль в CHANGELOG.
+- [x] Выполнить полную offline-проверку, Ruff и diff-check командами выше. Проверить diff: root exports, runtime, зависимости и потребитель не изменены.
+- [x] Самостоятельно проверить покрытие спецификации, владение ресурсами и ошибки. Исправить выявленное и повторить затронутые проверки.
+- [x] Commit `docs: demonstrate offline crawler and pipeline testing` с интеграционными тестами и документацией. Сообщить результаты, коммиты и состояние ветки; merge/push не выполнять.
 
 ## Handoff
 
-План подготовлен после согласования спецификации. Следующий шаг — проверка плана пользователем,
-затем выполнение в этой сессии без субагентов. Код реализации пока не изменён.
+План и спецификация согласованы. Реализация завершена; результаты записаны в progress-файле.
+Выполнено в этой сессии без субагентов.

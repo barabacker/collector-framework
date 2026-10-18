@@ -241,6 +241,64 @@ crawl.crawler  # the instance, for whatever counters the app kept on it
 cannot corrupt it. `stats.requests` counts requests the crawler asked for —
 retries happen inside the HTTP client and are invisible to it.
 
+## Testing without a network
+
+Import helpers explicitly from `collector.testing`. They need no pytest dependency.
+For a callback test, create a real crawler and response, then partition its output:
+
+```python
+from collector.testing import collect_callback, make_crawler, make_response
+
+crawler = make_crawler(Quotes)
+response = make_response(
+    '<div class="quote"><span class="text">Hello</span></div>',
+    request=crawler.request('https://example.test/'),
+    crawler=crawler,
+)
+requests, items = await collect_callback(crawler.parse(response))
+```
+
+`make_crawler` uses the normal constructor and parameter validation. It starts no
+lifecycle hooks. `collect_callback` does not execute requests or pipelines; every
+value other than a Request, including `None`, is an item. Exceptions and cancellation
+propagate unchanged. Supply `crawler` to `make_response` when testing `follow()` or
+`form_request()`; selectors and JSON parsing also work without it.
+
+For a whole crawl, supply every expected HTTP response and use the existing engine:
+
+```python
+from collector import Crawl, Crawler
+from collector.testing import FakeHttp, make_crawler
+
+
+class Page(Crawler):
+    name = 'page'
+    start_urls = ['https://example.test/']
+
+    async def parse(self, response):
+        yield {'text': response.text}
+
+
+async with FakeHttp({('GET', 'https://example.test/'): 'Hello'}) as http:
+    crawl = Crawl(make_crawler(Page, http=http))
+    stats = await crawl.run()
+    assert stats.items == 1
+```
+
+The full crawl executes configured `Settings.pipelines` and lifecycle hooks as
+usual. `Crawl.run()` borrows the HTTP client; the enclosing context closes it.
+The helpers also borrow any supplied `sink` and `log`.
+
+`FakeHttp` matches uppercase method and literal URL. Values can be text,
+`FakeResponse(text='missing', status_code=404)` or an exception to raise. Repeated
+requests use the same fixture content; fixtures are not modified. Missing routes
+raise `LookupError`, handled by the engine's normal `max_errors` policy. `calls`
+records method/URL pairs and `sent` records corresponding keyword arguments,
+including failed attempts. Keywords do not affect routing. The fake does not
+simulate retries, hooks, throttling or TLS; supply your own client for other
+scenarios. For tests of `open_crawl` or `crawl_many`, replace their HTTP factory
+using your test runner's patching facilities.
+
 ## Install
 
 ```bash
