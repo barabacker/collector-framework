@@ -1,29 +1,76 @@
-"""Keeping what a crawl emits: a ``SqliteDataset``, read back and exported.
+"""Application-owned JSONL writer configured through Settings.
 
-Pass a dataset to a run and every item the crawl emits is written to it, under
-the crawler's name — the crawler itself does not change. ``SqliteDataset``
-keeps them in a file you can open in the ``sqlite3`` shell while the crawl is
-still going; ``export_to()`` writes them out as JSON, JSON Lines or CSV.
-
-    uv run python examples/storage.py
-    sqlite3 quotes.db "SELECT json_extract(item, '$.author'), count(*) FROM items GROUP BY 1"
+Run with uv run python examples/storage.py. Appends to quotes.jsonl.
+Reading, export and the file format belong to the application.
+Importing this module opens no files and makes no requests.
 """
 
 from __future__ import annotations
 
 import asyncio
-import sys
-from contextlib import aclosing
+import json
 from pathlib import Path
 from typing import Any
 
-from collector import Crawler, Response, Settings, SqliteDataset, crawl
+from collector import Crawler, Response, Settings, crawl
+
+
+async def _write(file: Any, line: str) -> None:
+    """Cancellation must not leave a thread writing to a closed file."""
+    task = asyncio.create_task(asyncio.to_thread(file.write, line))
+    try:
+        await asyncio.shield(task)
+    except asyncio.CancelledError as cancelled:
+        while not task.done():
+            try:
+                await asyncio.shield(task)
+            except asyncio.CancelledError:
+                continue
+            except Exception:
+                break
+        try:
+            task.result()
+        except Exception as exc:
+            cancelled.add_note(f'pending file write failed: {exc!r}')
+        raise
+
+
+class JsonLinesPipeline:
+    """Example component; use distinct paths for concurrent crawls.
+
+    A shared writer needs application-level ownership and locking.
+    """
+
+    def __init__(self, path: str | Path) -> None:
+        self.path = Path(path)
+        self._lock = asyncio.Lock()
+
+    @classmethod
+    def from_crawler(cls, crawler: Crawler) -> JsonLinesPipeline:
+        return cls(crawler.settings.pipeline_options['jsonl_path'])
+
+    def open_crawler(self) -> None:
+        self._file = self.path.open('a', encoding='utf-8')
+
+    async def process_item(self, item: Any) -> Any:
+        line = json.dumps(item, ensure_ascii=False) + '\n'
+        async with self._lock:
+            await _write(self._file, line)
+        return item
+
+    async def close_crawler(self) -> None:
+        await asyncio.to_thread(self._file.close)
 
 
 class Quotes(Crawler):
     name = 'quotes'
     start_urls = ['https://quotes.toscrape.com/']
-    settings = Settings(delay=0.3, max_requests=2)
+    settings = Settings(
+        delay=0.3,
+        max_requests=2,
+        pipelines=(JsonLinesPipeline,),
+        pipeline_options={'jsonl_path': 'quotes.jsonl'},
+    )
 
     async def parse(self, response: Response) -> Any:
         page = response.selector()
@@ -39,23 +86,11 @@ class Quotes(Crawler):
 
 
 async def run() -> None:
-    # A dataset file is appended to across runs; start this demo from scratch.
-    for leftover in ('quotes.db', 'quotes.db-wal', 'quotes.db-shm'):
-        Path(leftover).unlink(missing_ok=True)
-
-    async with SqliteDataset('quotes.db') as dataset:
-        finished = await crawl(Quotes, dataset=dataset)
-        exported = await dataset.export_to('quotes.csv')
-        async with aclosing(dataset.iterate_items()) as items:
-            first = await anext(items, None)
-
-    print(f'{finished.stats.items} items stored in quotes.db, {exported} exported to quotes.csv')
-    if first:
-        print(f'  first: {first["author"]} — {first["text"][:50]}…')
+    finished = await crawl(Quotes)
+    print(f'{finished.stats.items} items appended to quotes.jsonl')
 
 
 def main() -> None:
-    sys.stdout.reconfigure(encoding='utf-8', errors='replace')
     asyncio.run(run())
 
 

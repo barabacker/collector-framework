@@ -6,6 +6,23 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Breaking changes
+
+- Removed `collector.storage`, `Dataset`, `MemoryDataset`, `SqliteDataset`,
+  `Crawl.dataset` and `dataset=` from every entry point. Persistence, reading
+  and export belong to the application. Existing files are not migrated or
+  removed. See [the migration guide](docs/migration/pipelines.md).
+
+### Pipelines
+
+- `Settings.pipelines` and `pipeline_options` configure application components
+  per crawl. Optional `from_crawler`, `open_crawler` and `close_crawler` surround
+  ordered `process_item` calls. Methods may return awaitables; items are transformed
+  before streaming. Pipeline failures stop their crawl regardless of max_errors,
+  preserve statistics and use `reason='pipeline_error'`.
+- Startup errors and cancellation during `start_requests` now release successfully
+  opened resources. Cleanup preserves primary failures and survives repeated cancel.
+
 ### Added
 
 - `Settings.max_errors` (default `0`), overridable per run with
@@ -13,15 +30,6 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   and succeeds with them in `crawl.errors`; one more stops it —
   `stats.reason == 'max_errors'`, nothing new sent, though requests other
   workers already took still go out — and fails it. `None` for no limit.
-- `collector.storage`: `Dataset` — append-only, each item tagged with the
-  crawler that emitted it, `push_data` / `iterate_items(crawler=)` / `flush` /
-  `close`, and `export_to()` for `.json`, `.jsonl` and `.csv` — with
-  `MemoryDataset` and `SqliteDataset` (stdlib `sqlite3`, one dedicated thread,
-  batched inserts, WAL). `open_crawl()`, `crawl()`, `run_crawler()`,
-  `collect()` and `crawl_many()` take `dataset=`: every emitted item is pushed
-  after `process_item()`, and the dataset is flushed when the crawl ends. The
-  caller owns it. Modelled on Crawlee's `Dataset`; TinyDB was ruled out because
-  it rewrites its whole file on every insert.
 - Request de-duplication. `request_key(request)` (in `collector.crawler`) is
   `METHOD|url|sha256(body)`, with the URL's scheme and host lower-cased, its
   fragment dropped, `params` merged into its query and the query sorted;

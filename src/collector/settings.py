@@ -92,3 +92,9 @@ class Settings:
     #: comma is easy to forget. ``build_http_client`` only ever iterates these.
     request_hooks: Sequence[RequestHook] = ()
     response_hooks: Sequence[ResponseHook] = ()
+
+    #: Classes instantiated separately for each crawl, in processing order.
+    pipelines: Sequence[type] = ()
+    #: Application-owned configuration read by components' from_crawler().
+    #: Treat as read-only; mutable run state belongs on component instances.
+    pipeline_options: Mapping[str, Any] = field(default_factory=dict)

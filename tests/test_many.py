@@ -10,10 +10,9 @@ from datetime import date
 from typing import Any
 
 import pytest
-from tests.conftest import SessionHttp, items_of
+from tests.conftest import SessionHttp
 
 from collector import Crawl, Crawler, Outcome, Settings, crawl_many
-from collector.storage import MemoryDataset
 
 
 def _patch_client(monkeypatch, fail_for: set[type[Crawler]] | None = None) -> list[type[Crawler]]:
@@ -253,16 +252,6 @@ async def test_leaving_early_cancels_the_crawlers_still_running(monkeypatch):
             break
 
     assert reasons == {'slow': 'cancelled'}
-
-
-async def test_one_dataset_keeps_each_crawlers_items_apart(monkeypatch):
-    _patch_client(monkeypatch)
-    dataset = MemoryDataset()
-
-    await drain([_crawler('a'), _crawler('b')], dataset=dataset)
-
-    assert await items_of(dataset, crawler='a') == [{'site': 'a'}]
-    assert await items_of(dataset, crawler='b') == [{'site': 'b'}]
 
 
 async def test_a_crawler_within_its_tolerance_has_no_error(monkeypatch):

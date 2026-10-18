@@ -29,7 +29,6 @@ from collector.crawler.params import resolve_params
 from collector.engine.crawl import Crawl, CrawlError
 from collector.engine.params import worker_count
 from collector.http.client import build_http_client
-from collector.storage.base import Dataset
 
 logger = logging.getLogger(__name__)
 
@@ -40,7 +39,6 @@ async def open_crawl(
     *,
     params: Mapping[str, Any] | None = None,
     sink: Any | None = None,
-    dataset: Dataset | None = None,
     log: Callable[[str], Awaitable[None]] | None = None,
 ) -> AsyncIterator[Crawl]:
     """Build a crawl and keep its HTTP session open for as long as it is used.
@@ -55,7 +53,7 @@ async def open_crawl(
                 await save(quote)
             print(crawl.stats)
 
-    A ``dataset``, if given, gets every item the crawl emits; the caller owns it.
+    Pipelines declared in the crawler's Settings handle items and own their resources.
 
     It is also the one place a crawl is assembled, so a failure anywhere under
     it leaves by the same door — wrapped in a :class:`~collector.engine.crawl.CrawlError`
@@ -77,15 +75,28 @@ async def open_crawl(
     )
     async with http:
         crawler = crawler_cls(CrawlerContext(http=http, params=params, sink=sink, log=log))
-        crawl = Crawl(crawler, dataset=dataset)
+        crawl = Crawl(crawler)
+        failure: BaseException | None = None
         try:
             yield crawl
-        except Exception as exc:
-            raise CrawlError(crawl) from exc
-        finally:
-            # Before the session closes: a consumer that broke out of stream()
-            # may have left the crawl running, and its workers hold that session.
+        except BaseException as exc:
+            failure = exc
+        # Before HTTP closes, including an abandoned stream whose run has
+        # already failed. Cleanup must not replace the consumer's exception.
+        try:
             await crawl.aclose()
+        except BaseException as exc:
+            if failure is None or isinstance(exc, asyncio.CancelledError):
+                if failure is not None and failure is not exc:
+                    exc.add_note(f'context was already failing: {failure!r}')
+                failure = exc
+            elif failure is not exc:
+                logger.warning('crawl.context_cleanup_failed %r', exc)
+                failure.add_note(f'and stopping the crawl failed: {exc!r}')
+        if failure is not None:
+            if isinstance(failure, Exception):
+                raise CrawlError(crawl) from failure
+            raise failure
 
 
 async def crawl(
@@ -93,7 +104,6 @@ async def crawl(
     *,
     params: Mapping[str, Any] | None = None,
     sink: Any | None = None,
-    dataset: Dataset | None = None,
     log: Callable[[str], Awaitable[None]] | None = None,
 ) -> Crawl:
     """Run a crawler to completion and return the crawl that ran it.
@@ -102,7 +112,7 @@ async def crawl(
     A failure surfaces as a :class:`~collector.engine.crawl.CrawlError` — ``open_crawl``
     wraps it on the way out, and does it once.
     """
-    async with open_crawl(crawler_cls, params=params, sink=sink, dataset=dataset, log=log) as run:
+    async with open_crawl(crawler_cls, params=params, sink=sink, log=log) as run:
         await run.run()
     return run
 
@@ -112,7 +122,6 @@ def run_crawler(
     *,
     params: Mapping[str, Any] | None = None,
     sink: Any | None = None,
-    dataset: Dataset | None = None,
     log: Callable[[str], Awaitable[None]] | None = None,
 ) -> Crawl:
     """Run a crawler to completion synchronously; return the crawl that ran it.
@@ -129,7 +138,6 @@ def run_crawler(
             crawler_cls,
             params=params,
             sink=sink,
-            dataset=dataset,
             log=log or _default_log(crawler_cls),
         )
     )
@@ -139,7 +147,6 @@ def collect(
     crawler_cls: type[Crawler],
     *,
     params: Mapping[str, Any] | None = None,
-    dataset: Dataset | None = None,
     log: Callable[[str], Awaitable[None]] | None = None,
 ) -> list[Any]:
     """Run a crawl and return the items it emitted.
@@ -155,7 +162,7 @@ def collect(
 
     async def drain() -> list[Any]:
         async with open_crawl(
-            crawler_cls, params=params, dataset=dataset, log=log or _default_log(crawler_cls)
+            crawler_cls, params=params, log=log or _default_log(crawler_cls)
         ) as run:
             return [item async for item in run.stream()]
 

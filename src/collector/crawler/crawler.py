@@ -30,10 +30,10 @@ class CrawlerContext:
     reads its limits out of ``params``, ``Crawler.log()`` writes to ``log``,
     and ``sink`` is the application's own, passed through untouched.
 
-    ``sink`` is deliberately untyped: it is for whatever an application keeps
-    that is not a ``Dataset`` passed to the run. The application defines what
-    it stores and how, and reads the sink back in its own ``process_item()``
-    override.
+    ``sink`` is deliberately untyped: it is for an application's own resource.
+    The application defines what it stores and how, and may read it in callbacks
+    or its own ``process_item()`` override. Pipeline-owned resources remain live
+    through ``closed()``; the engine never independently closes ``sink``.
     """
 
     http: HttpClient
@@ -140,10 +140,10 @@ class Crawler(ABC):
     async def process_item(self, item: Any) -> None:  # noqa: B027 — optional hook
         """Handle one emitted item. A no-op here; override to persist it.
 
-        Without a dataset the framework stores nothing: an application overrides
-        this to write the item to ``self.ctx.sink`` and to keep whatever counters
-        it needs. The crawl's own ``stats.items`` is counted by the crawl and
-        stays accurate whether or not an override calls ``super()``.
+        This legacy hook runs before Settings.pipelines; its return is ignored.
+        Prefer pipelines for persistence with managed resources and fatal write
+        errors. This hook retains the request max_errors policy. The crawl counts
+        stats.items whether or not an override calls super().
         """
 
     async def on_error(self, request: Request, exc: Exception) -> None:  # noqa: B027 — optional hook
@@ -159,8 +159,7 @@ class Crawler(ABC):
     async def closed(self, stats: Stats) -> None:  # noqa: B027 — optional hook
         """Run once the crawl is over. A no-op here; override to release a resource.
 
-        Always runs — on a clean finish, on ``max_requests``, on a cancelled
-        crawl and on one that ends in an error — so a crawler that opened
-        something in ``__init__`` has exactly one place to close it, whatever
-        ``stats.reason`` turns out to be.
+        Runs after a successful opened(), on a clean finish, a limit, cancellation
+        or error, while pipeline resources remain open. If opened() itself fails,
+        it must release its own partially opened resources.
         """

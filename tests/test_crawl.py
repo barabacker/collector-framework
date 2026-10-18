@@ -8,10 +8,9 @@ from dataclasses import replace
 from typing import Any
 
 import pytest
-from tests.conftest import FakeHttp, items_of
+from tests.conftest import FakeHttp
 
 from collector import Crawl, Crawler, Request
-from collector.storage import MemoryDataset
 
 PAGE_1 = 'https://example.test/p1'
 PAGE_2 = 'https://example.test/p2'
@@ -786,90 +785,6 @@ async def test_a_request_sent_with_dont_filter_still_counts_as_seen(ctx_factory)
     assert stats.duplicates == 1
 
 
-# ── datasets ─────────────────────────────────────────────────────────────────
-
-
-async def test_a_crawl_stores_every_item_under_the_crawlers_name(ctx_factory):
-    dataset = MemoryDataset()
-    ctx, _ = ctx_factory(FakeHttp())
-
-    await Crawl(_TwoPages(ctx), dataset=dataset).run()
-
-    stored = [item['url'] for item in await items_of(dataset, crawler='two_pages')]
-    assert stored == [PAGE_1, PAGE_2]
-
-
-async def test_the_dataset_is_flushed_once_when_the_crawl_ends(ctx_factory):
-    class _Counting(MemoryDataset):
-        flushes = 0
-
-        async def flush(self) -> None:
-            self.flushes += 1
-
-    dataset = _Counting()
-    ctx, _ = ctx_factory(FakeHttp())
-
-    await Crawl(_TwoPages(ctx), dataset=dataset).run()
-
-    assert dataset.flushes == 1
-
-
-async def test_a_dataset_that_refuses_an_item_fails_that_request(ctx_factory):
-    class _Full(MemoryDataset):
-        async def push_data(self, item: Any, *, crawler: str) -> None:
-            raise OSError('disk full')
-
-    ctx, _ = ctx_factory(FakeHttp())
-    crawl = Crawl(_TwoPages(ctx), dataset=_Full())
-
-    with pytest.raises(OSError, match='disk full'):
-        await crawl.run()
-
-    # Page 1's item fails before its callback gets to the link to page 2, so
-    # one request, one failure.
-    assert len(crawl.errors) == 1
-
-
-async def test_a_streamed_crawl_stores_the_items_it_streams(ctx_factory):
-    dataset = MemoryDataset()
-    ctx, _ = ctx_factory(FakeHttp())
-    crawl = Crawl(_TwoPages(ctx), dataset=dataset)
-
-    streamed = [item async for item in crawl.stream()]
-
-    assert streamed == await items_of(dataset)
-
-
-class _BrokenFlush(MemoryDataset):
-    async def flush(self) -> None:
-        raise OSError('disk full')
-
-
-async def test_a_dataset_that_cannot_flush_fails_the_crawl(ctx_factory):
-    closed: list[str] = []
-
-    class _Closing(_TwoPages):
-        async def closed(self, stats: Any) -> None:
-            closed.append(stats.reason)
-
-    ctx, _ = ctx_factory(FakeHttp())
-
-    with pytest.raises(OSError, match='disk full'):
-        await Crawl(_Closing(ctx), dataset=_BrokenFlush()).run()
-
-    assert closed == ['done']
-
-
-async def test_a_failed_flush_does_not_hide_the_first_request_error(ctx_factory):
-    ctx, _ = ctx_factory(FakeHttp())
-    crawl = Crawl(_FailingBoth(ctx), dataset=_BrokenFlush())
-
-    with pytest.raises(ValueError, match='bad') as info:
-        await crawl.run()
-
-    assert any('flushing the dataset failed' in note for note in info.value.__notes__)
-
-
 # ── error policy ─────────────────────────────────────────────────────────────
 
 PAGES = [f'https://example.test/{n}' for n in range(5)]
@@ -977,13 +892,6 @@ async def test_a_streamed_crawl_past_its_tolerance_raises_after_its_items(ctx_fa
             got.append(item)
 
     assert got == [{'url': PAGES[0]}]
-
-
-async def test_a_tolerated_crawl_still_raises_a_dataset_that_cannot_flush(ctx_factory):
-    ctx, _ = ctx_factory(FakeHttp())
-
-    with pytest.raises(OSError, match='disk full'):
-        await Crawl(_flaky({1}, max_errors=1)(ctx), dataset=_BrokenFlush()).run()
 
 
 async def test_a_slow_on_error_does_not_let_the_crawl_keep_sending(ctx_factory):

@@ -106,7 +106,7 @@ async with open_crawl(Quotes) as crawl:
   like `settings`, and read typed from `self.params`; a run's values for those
   are converted from strings and checked before the first request, so a bad
   value or an unknown name fails the run up front.
-- **Many crawlers** — `crawl_many(crawlers, concurrency=, params=, dataset=,
+- **Many crawlers** — `crawl_many(crawlers, concurrency=, params=,
   consume=, log=)` runs a set of crawlers at once, each through `open_crawl()`,
   at most `concurrency` together. `consume(crawl)` handles each crawler's items;
   `log(name, message)` gets every line with the crawler's name. One crawler
@@ -129,21 +129,86 @@ async with open_crawl(Quotes) as crawl:
   ones waiting out `delay` — still go out. `0` by default — the first failure
   — and `None` for no limit; a run can override it with
   `params={'max_errors': '20'}`.
-- **Storage** — pass `dataset=` to any entry point (`crawl_many` included) and
-  every item the crawl emits is also written there, under the crawler's name.
-  `MemoryDataset` keeps them in a list; `SqliteDataset('run.db')` in a file you
-  can query from the `sqlite3` shell while the crawl runs, written in batches
-  from its own thread. `iterate_items(crawler=...)` reads them back and
-  `export_to('x.json' | 'x.jsonl' | 'x.csv')` writes them out. A SQLite file is
-  appended to across runs — delete it to start over. The caller owns the
-  dataset and closes it (`async with`); the crawl only flushes it. Implement
-  `Dataset` for any other store.
+- **Item pipelines** — declare component classes in `Settings.pipelines`. Each
+  crawl creates its own instances, opens them, processes items in order and
+  closes them in reverse order. A component implements `process_item(item)`
+  and optionally `from_crawler(crawler)`, `open_crawler()` and `close_crawler()`.
+  Returned items reach the next component, then `stream()` / `collect()`.
+  Applications implement persistence, reading and export.
+
+## Configuring pipelines
+
+```python
+class SaveItems:
+    @classmethod
+    def from_crawler(cls, crawler):
+        component = cls()
+        component.path = crawler.settings.pipeline_options['path']
+        return component
+
+    def open_crawler(self): ...  # Open an application-owned resource.
+
+    async def process_item(self, item):
+        ...  # Persist or transform the item.
+        return item
+
+    async def close_crawler(self): ...  # Flush and close that resource.
+
+
+class SavingQuotes(Quotes):
+    settings = Settings(
+        pipelines=(SaveItems,),
+        pipeline_options={'path': 'quotes.jsonl'},
+    )
+```
+
+Run `SavingQuotes` through any entry point, including `crawl_many`; no pipeline
+argument is needed at the call site. A complete JSONL implementation is in
+[`examples/storage.py`](examples/storage.py).
+
+Components open before `crawler.opened()` and `start_requests()`, and close
+after the workers stop and `crawler.closed(stats)` finishes. Only successfully
+opened components are closed; a failed `open_crawler()` must undo its own partial
+setup. Cleanup runs on errors, limits and cancellation, including repeated
+cancellation while closing. A context opened without starting a run opens no
+pipeline resources. `from_crawler` is synchronous and should only configure the
+component. Without it the class is constructed with no arguments.
+
+Lifecycle and item methods may be synchronous or return awaitables. Sync code
+runs in the event loop: use an async driver or application-managed thread work
+for blocking I/O. Different request workers may call one component concurrently;
+the component handles its own locking. Ordering is guaranteed within one item's
+chain, not across items. Treat Settings and its nested options as read-only.
+
+The existing `crawler.process_item(item)` hook runs first; its return is ignored.
+Pipelines then transform the item, with `None` a valid value. `stats.items` counts
+items emitted by callbacks, including ones a pipeline failed to save. There is
+no automatic item dropping, rollback or write retry. Avoid saving the same item
+again in a stream consumer if a pipeline already persists it.
+
+Any pipeline failure ends that crawl regardless of `max_errors`, with
+`stats.reason == 'pipeline_error'`. In-flight workers are cancelled and awaited;
+their effects may already have happened. `CrawlError.__cause__` / `Outcome.error`
+retain the original exception, and cleanup errors do not hide it. Pipeline item
+errors retain their request in `crawl.errors`; setup and closing failures have
+no request. Cancellation remains cancellation. Ordinary parser errors and the
+legacy `crawler.process_item` hook still use `max_errors`.
+
+A pipeline may put a borrowed resource in `crawler.ctx.sink` for start requests
+or callbacks to read. It should reject an occupied sink rather than overwrite
+it. The engine does not close the sink independently. An external shared resource
+remains owned by its caller; components must not each close it. For an early
+`stream()` break use `open_crawl`; for an early `crawl_many` break also wrap the
+iterator in `contextlib.aclosing`.
+
+See [migration from built-in storage](docs/migration/pipelines.md) for the
+removed APIs and treatment of existing data.
 
 ## Examples
 
-Ten runnable scripts in [`examples/`](examples/), each about one thing —
+Eleven runnable scripts in [`examples/`](examples/), each about one thing —
 pagination, a JSON API, submitting a form, streaming with an early `break`,
-several crawlers at once, writing items to a sink, keeping them in SQLite, how
+several crawlers at once, transforming items, appending them to JSONL or MongoDB, how
 many failed pages a crawl tolerates, hooks that solve a challenge, and the
 pacing knobs.
 
@@ -155,9 +220,10 @@ uv run python examples/quotes.py
 
 No item schema, no scheduler, no robots.txt, and no registry — how an
 application names and looks up a crawler is its own business, and a library
-holding global mutable state for it is a cost, not a feature. Beyond a
-`Dataset` you pass in, the framework persists nothing: override
-`process_item()` and write to `ctx.sink`, which it passes through untouched.
+holding global mutable state for it is a cost, not a feature. The framework
+provides no storage backend, schema, reader or exporter. Applications supply
+pipeline components or consume the stream. The existing `process_item()` hook
+and `ctx.sink` remain available for application code.
 
 ```python
 class Saving(Quotes):
