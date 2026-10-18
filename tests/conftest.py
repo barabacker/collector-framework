@@ -8,17 +8,8 @@ from typing import Any
 import pytest
 
 from collector.crawler import CrawlerContext
-
-
-@dataclass
-class FakeResponse:
-    """The parts of a curl_cffi response the framework touches."""
-
-    text: str = ''
-    status_code: int = 200
-    url: str = 'https://example.test/'
-    content: bytes = b''
-    headers: dict[str, str] = field(default_factory=dict)
+from collector.testing import FakeHttp as StrictFakeHttp
+from collector.testing import FakeResponse
 
 
 @dataclass
@@ -33,9 +24,10 @@ class FakeHttp:
     default_body: str = ''
 
     async def request(self, method: str, url: str, **kwargs: Any) -> FakeResponse:
-        self.calls.append((method, url))
-        self.sent.append(kwargs)
-        return FakeResponse(text=self.pages.get(url, self.default_body), url=url)
+        transport = StrictFakeHttp({(method, url): self.pages.get(url, self.default_body)})
+        transport.calls = self.calls
+        transport.sent = self.sent
+        return await transport.request(method, url, **kwargs)
 
 
 class SessionHttp(FakeHttp):
