@@ -2,10 +2,14 @@
 
 from __future__ import annotations
 
-from collections.abc import Mapping
-from typing import Any
+from collections.abc import AsyncIterable, Awaitable, Callable, Mapping
+from typing import Any, TypeVar
 
 from curl_cffi.requests.headers import Headers
+
+from collector.crawler import Crawler, CrawlerContext, Request, Response
+
+C = TypeVar('C', bound=Crawler)
 
 
 class FakeResponse:
@@ -74,3 +78,60 @@ class FakeHttp:
 
     async def __aexit__(self, *exc_info: Any) -> None:
         await self.close()
+
+
+def make_crawler(
+    crawler_cls: type[C],
+    *,
+    params: Mapping[str, Any] | None = None,
+    sink: Any = None,
+    http: Any = None,
+    log: Callable[[str], Awaitable[None]] | None = None,
+) -> C:
+    """Construct a real crawler without starting lifecycle hooks or pipelines.
+
+    Supplied resources remain caller-owned. The default HTTP client rejects
+    every request until fixtures are explicitly registered.
+    """
+    return crawler_cls(
+        CrawlerContext(
+            http=FakeHttp() if http is None else http,
+            params={} if params is None else params,
+            sink=sink,
+            log=log,
+        )
+    )
+
+
+def make_response(
+    text: str,
+    *,
+    request: Request,
+    crawler: Crawler | None = None,
+    status: int = 200,
+    headers: Mapping[str, str] | None = None,
+) -> Response:
+    """Wrap text in a real Response; supply crawler for follow/form_request."""
+    return Response(
+        FakeResponse(text=text, status_code=status, url=request.url, headers=headers),
+        request,
+        crawler,
+    )
+
+
+async def collect_callback(
+    results: AsyncIterable[Any],
+) -> tuple[list[Request], list[Any]]:
+    """Partition callback output once, without executing requests or pipelines.
+
+    None is an item. Order within each group is preserved; errors and cancellation
+    propagate unchanged.
+    """
+    requests: list[Request] = []
+    items: list[Any] = []
+    async for result in results:
+        if isinstance(result, Request):
+            requests.append(result)
+        else:
+            items.append(result)
+    return requests, items
